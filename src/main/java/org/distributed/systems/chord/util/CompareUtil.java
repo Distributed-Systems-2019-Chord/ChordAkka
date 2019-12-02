@@ -23,7 +23,7 @@ public class CompareUtil {
             } else {
                 return (id > beginKey && id < endKey);
             }
-        } else {
+        } else { // (endKey == beginKey)
             return true; // There is just one node
         }
     }
