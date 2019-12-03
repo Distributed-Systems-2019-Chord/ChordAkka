@@ -29,13 +29,13 @@ public class HashUtil implements IHashUtil {
             e.printStackTrace();
         }
         // TODO: Messed this UP!
-        try {
-            throw new Exception("Not Implemented - messed up by Leonard");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return 0L;
-        // return sha1 % ChordStart.AMOUNT_OF_KEYS;
+//        try {
+//            throw new Exception("Not Implemented - messed up by Leonard");
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//        return 0L;
+         return sha1;
     }
 
     private static String byteToHex(final byte[] hash) {
