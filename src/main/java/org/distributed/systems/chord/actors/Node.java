@@ -1,8 +1,10 @@
 package org.distributed.systems.chord.actors;
 
 import akka.actor.AbstractActor;
+import akka.actor.Actor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import akka.dispatch.OnComplete;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import akka.io.Tcp;
@@ -13,8 +15,7 @@ import akka.pattern.Patterns;
 import akka.util.Timeout;
 import com.typesafe.config.Config;
 import org.distributed.systems.ChordStart;
-import org.distributed.systems.chord.messaging.JoinMessage;
-import org.distributed.systems.chord.messaging.KeyValue;
+import org.distributed.systems.chord.messaging.*;
 import org.distributed.systems.chord.util.impl.HashUtil;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -29,8 +30,26 @@ import java.util.Random;
 
 public class Node extends AbstractActor {
 
+    public class FingerTableEntry {
+
+        public long id;
+
+        // Is IP + Port
+        public ActorRef chordRef;
+
+        public int port;
+
+        public String ip;
+
+        @Override
+        public String toString() {
+            return "ID " + id + " of " + chordRef.toString();
+        }
+    }
+    private FingerTableEntry[] fingerTable;
+
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-    public static final int m = 3; // Number of bits in key id's
+    public static final int m = 6; // Number of bits in key id's
     public static final long AMOUNT_OF_KEYS = Math.round(Math.pow(2, m));
     static final int MEMCACHE_MIN_PORT = 11211;
     static final int MEMCACHE_MAX_PORT = 12235;
@@ -41,8 +60,7 @@ public class Node extends AbstractActor {
 
     private ActorRef predecessor = null;
     private long predecessorId;
-    private ActorRef sucessor = null;
-    private long sucessorId;
+
     private ActorRef centralNode = null;
     private String type = "";
     private long id;
@@ -62,9 +80,6 @@ public class Node extends AbstractActor {
         super.preStart();
         log.info("Starting up...     ref: " + getSelf());
 
-        // Generating Id:
-//        Random randomGenerator = new Random();
-//        long randomInt = randomGenerator.nextInt(ChordStart.M);
         long envVal;
         HashUtil hashUtil = new HashUtil();
         if (System.getenv("NODE_ID") == null) {
@@ -79,12 +94,23 @@ public class Node extends AbstractActor {
         this.id = envVal;
         System.out.println("Node Id " + this.id);
 
+        // Init the FingerTable
+        fingerTable = new FingerTableEntry[Node.m];
+        int i = 0;
+
         if (this.type.equals("central")) {
             this.predecessor = getSelf();
             this.predecessorId = this.id;
-            this.sucessor = getSelf();
-            this.sucessorId = this.id;
             System.out.println("Started As Central Node");
+
+            // Add Finger Table Entry
+            for (int k = 0; k < Node.m; k++) {
+                FingerTableEntry fte = new FingerTableEntry();
+                fte.chordRef = getSelf();
+                fte.id = this.id;
+                this.fingerTable[k] = fte;
+            }
+
         } else {
             System.out.println("Started As Regular Node");
             final String centralNodeAddress = getCentralNodeAddress();
@@ -98,11 +124,13 @@ public class Node extends AbstractActor {
         if (this.centralNode != null) {
             // Request a Join
             JoinMessage.JoinRequest joinRequestMessage = new JoinMessage.JoinRequest(getSelf(), this.id);
+
             this.centralNode.tell(joinRequestMessage, getSelf());
-            // TODO: Retry if this fails (as central node does not respond)
+            // TODO: This needs to be replaced with the pseudocode join later
+            // used to bootstrap the finding process;
         }
 
-        this.createMemCacheTCPSocket();
+        // this.createMemCacheTCPSocket();
     }
 
     private String getNodeType() {
@@ -137,6 +165,43 @@ public class Node extends AbstractActor {
         return "akka://ChordNetwork@" + centralEntityAddress + ":" + centralEntityAddressPort + "/user/ChordActor";
     }
 
+    private void fill_finger_table()  {
+
+        System.out.println("Filling Finger Table");
+        // skip first, as it contains always the sucessor
+        for (int k = 1; k <= Node.m; k++) {
+            long idx = (long) Math.pow(2, k - 1) % (long) Math.pow(2, Node.m);
+            if ( k == 1 )
+                continue;
+            long lookup_id =  (long) this.id + idx %  (long) Math.pow(2, Node.m);
+            System.out.println("Query Now: " + this.fingerTable[0].chordRef.toString() + " for successor with resp: " + lookup_id);
+
+            // Get The Successor For This Id
+            Future<Object> fsFuture = Patterns.ask(this.fingerTable[0].chordRef, new FindSuccessor.Request(id + idx, k-1), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+            fsFuture.onComplete(
+                    new OnComplete<Object>() {
+                        public void onComplete(Throwable failure, Object result) {
+                            if (failure != null) {
+                                // We got a failure, handle it here
+                                System.out.println("Something went wrong");
+                                System.out.println(failure);
+                            } else {
+                                // We got a result, do something with it
+                                FindSuccessor.Reply fsrpl = (FindSuccessor.Reply) result;
+                                FingerTableEntry fte = new FingerTableEntry();
+                                fte.chordRef = fsrpl.succesor;
+                                fte.id = fsrpl.id;
+
+                                System.out.println("Found " + fte.chordRef.toString());
+                                System.out.println(fte.toString() + " " + fsrpl.id);
+                                UpdateFinger.Request ufReq = new UpdateFinger.Request(fsrpl.fingerTableIndex, fte);
+                                getSelf().tell(ufReq,getSelf());
+                            }
+                        }
+                    }, getContext().system().dispatcher());
+        }
+    }
+
     @Override
     public Receive createReceive() {
         log.info("Received a message");
@@ -145,6 +210,46 @@ public class Node extends AbstractActor {
                 .match(JoinMessage.JoinRequest.class, msg -> {
                     System.out.println("A node asked to join");
                     handleJoinRequest(msg);
+
+                    // Ping successor:
+                    this.fingerTable[0].chordRef.tell(new Ping.Request(this.id), getSelf());
+
+                })
+                .match(Ping.Request.class, msg -> {
+                    if (this.type.equals("central")) {
+                        System.out.println("Central Received Final Ping");
+                        System.out.println(msg.toString());
+
+                        // Get ActorRef 8 -> and print Table
+                        if (this.fingerTable[0].id == 8) {
+                            Thread.sleep(500);
+                            this.fingerTable[0].chordRef.tell(new Print.Request(), getSender());
+                        }
+                    } else {
+                        System.out.println("Visited Node Regular" + this.id);
+                        msg.appendTrace(id);
+                        this.fingerTable[0].chordRef.forward(msg, getContext());
+                    }
+                })
+                .match(Print.Request.class, msg-> {
+                    this.printFingerTable();
+                })
+                .match(FindSuccessor.Request.class, msg -> {
+                    long id = msg.id;
+                    if ( (this.id < id && id <= this.fingerTable[0].id) || (this.id < id && id > this.fingerTable[0].id && this.fingerTable[0].id < this.id)) {
+                        getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTable[0].chordRef, this.fingerTable[0].id, msg.fingerTableIndex), getSelf());
+                    } else {
+                        this.fingerTable[0].chordRef.forward(msg, getContext());
+                    }
+                })
+                .match(UpdateFinger.Request.class, msg -> {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("Updating Finger Table Entry Number " + msg.fingerTableIndex + "\n");
+                    sb.append("\t Previous Entry:\t " + this.fingerTable[(int)msg.fingerTableIndex] + "\n");
+                    sb.append("\t New Entry:\t " +  msg.fingerTableEntry + "\n");
+                    this.fingerTable[(int)msg.fingerTableIndex] = msg.fingerTableEntry;
+                    System.out.println(sb.toString());
+
                 })
                 .match(JoinMessage.JoinReply.class, msg -> {
                     if (msg.accepted) {
@@ -152,12 +257,18 @@ public class Node extends AbstractActor {
                         this.predecessor = msg.predecessor;
                         this.predecessorId = msg.predecessorId;
 
-                        this.sucessor = msg.sucessor;
-                        this.sucessorId = msg.sucessorId;
+                        System.out.println("Added successor to finger table");
+                        FingerTableEntry fte = new FingerTableEntry();
+                        fte.chordRef = msg.sucessor;
+                        fte.id = msg.sucessorId;
+                        System.out.println(fte.toString());
+                        this.fingerTable[0] = fte;
 
                         System.out.println("Regular Node " + this.id + " joined by receiving a JoinReply");
-                        System.out.println("My Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
+                        System.out.println("My Successor:" + this.fingerTable[0].chordRef.toString() + " with id:" + this.fingerTable[0].id);
                         System.out.println("My Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
+
+                        fill_finger_table();
                     } else {
                         System.out.println("Join was not accepted for Node" + this.id);
                         getContext().stop(getSelf());
@@ -169,9 +280,14 @@ public class Node extends AbstractActor {
 
                     // Determine if a successor or predecessor
                     if (msg.newPredecessor == null && msg.newSucessor != null) {
-                        // it's a successor
-                        this.sucessorId = msg.newSucessorKey;
-                        this.sucessor = msg.newSucessor;
+
+                        System.out.println("Added successor to finger table");
+                        FingerTableEntry fte = new FingerTableEntry();
+                        fte.chordRef = msg.newSucessor;
+                        fte.id = msg.newSucessorKey;
+                        System.out.println(fte.toString());
+                        this.fingerTable[0] = fte;
+
                         getContext().getSender().tell(new JoinMessage.JoinConfirmationReply(true), ActorRef.noSender());
                         System.out.println("Node " + this.id + " confirmed the JoinRequest");
                         System.out.println("Node's " + this.id + "current predecessor: " + this.predecessorId);
@@ -183,7 +299,7 @@ public class Node extends AbstractActor {
                         JoinMessage.JoinConfirmationReply confirmReplyMsg = new JoinMessage.JoinConfirmationReply(true);
                         getContext().getSender().tell(confirmReplyMsg, ActorRef.noSender());
                         System.out.println("Node " + this.id + " confirmed the JoinRequest");
-                        System.out.println("Node's " + this.id + "current successor: " + this.sucessorId);
+                        System.out.println("Node's " + this.id + "current successor: " + this.fingerTable[0].chordRef);
                         System.out.println("Node's " + this.id + " new predecessor: " + msg.newPredecessorKey);
                     } else {
                         // Some illegal state, decline this request
@@ -239,7 +355,8 @@ public class Node extends AbstractActor {
      */
     private void handleJoinRequest(JoinMessage.JoinRequest msg) throws Exception {
         // Handle Error Case - Regular Node, that is not part of a network
-        if (this.predecessor == null && this.sucessor == null && this.type.equals("regular")) {
+        // TODO: this does not work anymore this way
+        if (this.predecessor == null && this.fingerTable[0] == null && this.type.equals("regular")) {
             msg.requestor.tell(new JoinMessage.JoinReply(null, null, false), getSelf());
             System.out.println("I declined the JOIN, I am a regular Node being part of no network");
             return;
@@ -253,10 +370,15 @@ public class Node extends AbstractActor {
         }
 
 
-        if (this.predecessor == getSelf() && this.sucessor == getSelf()) {
+        if (this.predecessor == getSelf() && this.fingerTable[0].chordRef == getSelf()) {
             // Initial Situation: central node is the only node in the ring -> insert the requesting node
-            this.sucessor = msg.requestor;
-            this.sucessorId = msg.requestorKey;
+
+            FingerTableEntry fte = new FingerTableEntry();
+            fte.chordRef = msg.requestor;
+            fte.id = msg.requestorKey;
+            System.out.println(fte.toString());
+            this.fingerTable[0] = fte;
+
             this.predecessor = msg.requestor;
             this.predecessorId = msg.requestorKey;
             msg.requestor.tell(new JoinMessage.JoinReply(getSelf(), getSelf(), true, this.id, this.id), getSelf());
@@ -279,15 +401,15 @@ public class Node extends AbstractActor {
 
             } else if (msg.requestorKey > this.id) {
 
-                if (msg.requestorKey > this.sucessorId) {
+                if (msg.requestorKey > this.fingerTable[0].id) {
                     // 4. Greater than successor -> Either forward or handle edge case
-                    if (this.sucessorId < this.id) {
+                    if (this.fingerTable[0].id < this.id) {
                         // Edge Case: Join Request passing 0 in the ring ->
                         // Current node's successor is smaller -> Requester can be inserted as new successor
                         handleJoinInsertAsSuccessor(msg);
                     } else {
                         System.out.println("Successor needs to handle the Join Request");
-                        this.sucessor.forward(msg, getContext());
+                        this.fingerTable[0].chordRef.forward(msg, getContext());
                     }
                 } else {
                     handleJoinInsertAsSuccessor(msg);
@@ -301,7 +423,7 @@ public class Node extends AbstractActor {
             }
         }
         System.out.println("I accepted a Join Request from " + msg.requestorKey);
-        System.out.println("New Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
+        System.out.println("New Successor:" + this.fingerTable[0].chordRef.toString() + " with id:" + this.fingerTable[0].id);
         System.out.println("New Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
     }
 
@@ -317,16 +439,21 @@ public class Node extends AbstractActor {
     private void handleJoinInsertAsSuccessor(JoinMessage.JoinRequest msg) throws Exception {
         JoinMessage.JoinConfirmationRequest joinConfirmationRequestMessage = new JoinMessage.JoinConfirmationRequest(msg.requestor, msg.requestorKey, null, 0);
         Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-        Future<Object> confirmationReqFuture = Patterns.ask(this.sucessor, joinConfirmationRequestMessage, timeout);
+        Future<Object> confirmationReqFuture = Patterns.ask(this.fingerTable[0].chordRef, joinConfirmationRequestMessage, timeout);
         JoinMessage.JoinConfirmationReply result = (JoinMessage.JoinConfirmationReply) Await.result(confirmationReqFuture, timeout.duration());
         //TODO: Handle timeout!
         if (result.accepted) {
-            System.out.println("I return a successor" + this.sucessorId);
+            System.out.println("I return a successor" + this.fingerTable[0].id);
             System.out.println("I am " + this.id);
-            JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(getSelf(), this.sucessor, true, this.id, this.sucessorId);
+            JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(getSelf(), this.fingerTable[0].chordRef, true, this.id, this.fingerTable[0].id);
             msg.requestor.tell(joinReplyMessage, getSelf());
-            this.sucessor = msg.requestor;
-            this.sucessorId = msg.requestorKey;
+
+            FingerTableEntry fte = new FingerTableEntry();
+            fte.chordRef = msg.requestor;
+            fte.id = msg.requestorKey;
+            System.out.println(fte.toString());
+            this.fingerTable[0] = fte;
+
             System.out.println("I confirmed the final join!");
             System.out.println("My new successor: " + msg.requestorKey);
             return;
@@ -366,6 +493,15 @@ public class Node extends AbstractActor {
             System.out.println("I declined the JOIN, predecessor rejected join!");
             return;
         }
+    }
+
+    private void printFingerTable() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("---Finger Table---\n");
+        for(int i = 0; i < this.fingerTable.length; i++) {
+            sb.append( i + " -- " + this.fingerTable[i].id + " - " + this.fingerTable[i].chordRef.toString() + "\n");
+        }
+        System.out.println(sb.toString());
     }
 
     private void createMemCacheTCPSocket() {
