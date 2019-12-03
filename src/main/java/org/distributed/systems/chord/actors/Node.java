@@ -174,6 +174,7 @@ public class Node extends AbstractActor {
                         this.sucessor = msg.newSucessor;
                         getContext().getSender().tell(new JoinMessage.JoinConfirmationReply(true), ActorRef.noSender());
                         System.out.println("Node " + this.id + " confirmed the JoinRequest");
+                        System.out.println("Node's " + this.id + "current predecessor: " + this.predecessorId);
                         System.out.println("Node's " + this.id + " new successor: " + msg.newSucessorKey);
                     } else if (msg.newPredecessor != null && msg.newSucessor == null) {
                         // it's a predecessor
@@ -182,6 +183,7 @@ public class Node extends AbstractActor {
                         JoinMessage.JoinConfirmationReply confirmReplyMsg = new JoinMessage.JoinConfirmationReply(true);
                         getContext().getSender().tell(confirmReplyMsg, ActorRef.noSender());
                         System.out.println("Node " + this.id + " confirmed the JoinRequest");
+                        System.out.println("Node's " + this.id + "current successor: " + this.sucessorId);
                         System.out.println("Node's " + this.id + " new predecessor: " + msg.newPredecessorKey);
                     } else {
                         // Some illegal state, decline this request
