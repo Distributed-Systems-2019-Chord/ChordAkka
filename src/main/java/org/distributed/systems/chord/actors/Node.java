@@ -13,8 +13,10 @@ import akka.pattern.Patterns;
 import akka.util.Timeout;
 import com.typesafe.config.Config;
 import org.distributed.systems.ChordStart;
+import org.distributed.systems.chord.messaging.Command;
 import org.distributed.systems.chord.messaging.JoinMessage;
 import org.distributed.systems.chord.messaging.KeyValue;
+import org.distributed.systems.chord.util.CompareUtil;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 
@@ -90,8 +92,50 @@ public class Node extends AbstractActor {
             this.centralNode.tell(joinRequestMessage, getSelf());
             // We need something, that ensures if this message get's lost --> everything from here on relies on msgs i guess
         }
+    }
 
-//        this.createMemCacheTCPSocket();
+    private void getValueForKey(long key) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(key, new KeyValue.Get(key))) {
+            Serializable getResult = getValueFromStorageActor(key);
+            System.out.println("I got this result on my get lookup: " + getResult);
+        }
+    }
+
+    private Serializable getValueFromStorageActor(long key) {
+        KeyValue.Get getRequest = new KeyValue.Get(key);
+        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+        Future<Object> valueResponse = Patterns.ask(this.storageActorRef, getRequest, timeout);
+        try {
+            return ((KeyValue.GetReply) Await.result(valueResponse, timeout.duration())).value;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private void putValueForKey(long key, Serializable value) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(key, new KeyValue.Put(key, value))) {
+            putValueInStore(key, value);
+            System.out.println("I DID PUT VALUE " + value + " ON NODE " + id + " THE KEY WAS " + key);
+
+            System.out.println("GETTING THE VALUE NOW..");
+
+            getValueForKey(key);
+        }
+    }
+
+    private void putValueInStore(long key, Serializable value) {
+        storageActorRef.tell(new KeyValue.Put(key, value), getSelf());
+    }
+
+    private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
+        // Between my predecessor and my node id
+        if (CompareUtil.between(this.predecessorId, false, this.id, true, key)) {
+            return true;
+        } else {
+            this.sucessor.forward(commandMessage, getContext());
+            return false;
+        }
     }
 
     private String getNodeType() {
@@ -168,7 +212,7 @@ public class Node extends AbstractActor {
                                 return;
 
                             } else {
-                                this.sucessor.forward(msg, getContext());
+                                this.predecessor.forward(msg, getContext());
                             }
 
                             return;
@@ -212,6 +256,11 @@ public class Node extends AbstractActor {
                         System.out.println("I joined the Network");
                         System.out.println("Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
                         System.out.println("Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
+
+
+                        // If success then we can put and ask key values
+                        putValueForKey(0, 12);
+                        putValueForKey(30, 42);
                     } else {
                         System.out.println("Could not JOIN network, Shutting down");
                         getContext().stop(getSelf());
@@ -269,13 +318,15 @@ public class Node extends AbstractActor {
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {
-                    String key = putValueMessage.key;
+                    long key = putValueMessage.key;
                     Serializable value = putValueMessage.value;
-                    log.info("key, value: " + key + " " + value);
-                    this.storageActorRef.forward(putValueMessage, getContext());
+                    putValueForKey(key, value);
+//                    log.info("key, value: " + key + " " + value);
+//                    this.storageActorRef.forward(putValueMessage, getContext());
                 })
                 .match(KeyValue.Get.class, getValueMessage -> {
-                    this.storageActorRef.forward(getValueMessage, getContext());
+                    getValueForKey(getValueMessage.key);
+//                    this.storageActorRef.forward(getValueMessage, getContext());
                 })
                 .build();
     }

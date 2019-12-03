@@ -4,12 +4,12 @@ import java.io.Serializable;
 
 public class KeyValue {
 
-    public static class Put implements Command, Serializable {
-        public final String key;
+    public static class Put implements Command {
+        public final long key;
         public final Serializable value;
 
 
-        public Put(String key, Serializable value) {
+        public Put(long key, Serializable value) {
             this.key = key;
             this.value = value;
         }
@@ -20,10 +20,10 @@ public class KeyValue {
         }
     }
 
-    public static class Get implements Command, Serializable {
-        public final String key;
+    public static class Get implements Command {
+        public final long key;
 
-        public Get(String key) {
+        public Get(long key) {
             this.key = key;
         }
     }

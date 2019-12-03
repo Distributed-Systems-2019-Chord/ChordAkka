@@ -8,16 +8,15 @@ import akka.io.Tcp;
 import akka.io.TcpMessage;
 import akka.pattern.Patterns;
 import akka.util.ByteString;
+import akka.util.Timeout;
 import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.messaging.KeyValue;
 import scala.concurrent.Await;
+import scala.concurrent.Future;
 
 import java.io.Serializable;
 import java.time.Duration;
 import java.util.Arrays;
-
-import scala.concurrent.Future;
-import akka.util.Timeout;
 
 class MemcachedActor extends AbstractActor {
 
@@ -71,7 +70,7 @@ class MemcachedActor extends AbstractActor {
     private void handleGetCommand(String commandLine) {
         try {
             String[] get_options = commandLine.split(" ");
-            String key = get_options[1];
+            long key = Long.valueOf(get_options[1]);
             System.out.println("Fetching payload");
 
             KeyValue.Get keyValueGetMessage = new KeyValue.Get(key);
@@ -103,7 +102,7 @@ class MemcachedActor extends AbstractActor {
     private void handleSetCommand(String payloadTextLine) {
         try {
             String[] set_options = previousTextCommand.split(" ");
-            String hashKey = set_options[1];
+            long hashKey = Long.valueOf(set_options[1]);
             KeyValue.Put putValueMessage = new KeyValue.Put(hashKey, payloadTextLine);
 
             Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));

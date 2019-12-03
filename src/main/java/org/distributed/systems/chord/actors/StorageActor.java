@@ -21,7 +21,7 @@ class StorageActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(KeyValue.Put.class, putValueMessage -> {
-                    String key = putValueMessage.key;
+                    long key = putValueMessage.key;
                     Serializable value = putValueMessage.value;
                     log.info("Put for key, value: " + key + " " + value);
                     this.storageService.put(key, value);
