@@ -148,10 +148,13 @@ public class Node extends AbstractActor {
                 })
                 .match(JoinMessage.JoinReply.class, msg -> {
                     if (msg.accepted) {
+
                         this.predecessor = msg.predecessor;
                         this.predecessorId = msg.predecessorId;
+
                         this.sucessor = msg.sucessor;
                         this.sucessorId = msg.sucessorId;
+
                         System.out.println("Regular Node " + this.id + " joined by receiving a JoinReply");
                         System.out.println("My Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
                         System.out.println("My Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
@@ -257,45 +260,57 @@ public class Node extends AbstractActor {
             msg.requestor.tell(new JoinMessage.JoinReply(getSelf(), getSelf(), true, this.id, this.id), getSelf());
         } else {
             // Handle Cases for Chord Network with more than 1 node (4 general cases)
-
-            if (msg.requestorKey < this.predecessorId) {
-                // 1. Smaller than predecessor -> Either forward or handle edge case
-                if (this.id < this.predecessorId) {
-                    // Edge Case: Join Request passing 0 in the ring ->
-                    // Current node's predecessor is bigger -> Requester can be inserted as new predecessor
+            if (msg.requestorKey < this.id) {
+                if (msg.requestorKey < this.predecessorId) {
+                    // 1. Smaller than predecessor -> Either forward or handle edge case
+                    if (this.id < this.predecessorId) {
+                        // Edge Case: Join Request passing 0 in the ring ->
+                        // Current node's predecessor is bigger -> Requester can be inserted as new predecessor
+                        handleJoinInsertAsPredecessor(msg);
+                    } else {
+                        //
+                        System.out.println("Predecessor needs to handle the Join Request");
+                        this.predecessor.forward(msg, getContext());
+                    }
+                } else {
                     handleJoinInsertAsPredecessor(msg);
-                } else {
-                    //
-                    System.out.println("Predecessor needs to handle the Join Request");
-                    this.predecessor.forward(msg, getContext());
                 }
 
-            } else if (this.predecessorId < msg.requestorKey && msg.requestorKey < this.id) {
-                // 2. Between predecessor and me --> add as new predecessor if current predecessor accepts
-                handleJoinInsertAsPredecessor(msg);
+            } else if (msg.requestorKey > this.id) {
 
-            } else if (this.id < msg.requestorKey && msg.requestorKey < this.sucessorId) {
-                // 3. Between successor and me --> add as new successor if current successor accepts
-                handleJoinInsertAsSuccessor(msg);
-
-            } else if (this.sucessorId < msg.requestorKey) {
-                // 4. Greater than successor -> Either forward or handle edge case
-                if (this.sucessorId < this.id) {
-                    // Edge Case: Join Request passing 0 in the ring ->
-                    // Current node's successor is smaller -> Requester can be inserted as new successor
+                if (msg.requestorKey > this.sucessorId) {
+                    // 4. Greater than successor -> Either forward or handle edge case
+                    if (this.sucessorId < this.id) {
+                        // Edge Case: Join Request passing 0 in the ring ->
+                        // Current node's successor is smaller -> Requester can be inserted as new successor
+                        handleJoinInsertAsSuccessor(msg);
+                    } else {
+                        System.out.println("Successor needs to handle the Join Request");
+                        this.sucessor.forward(msg, getContext());
+                    }
+                } else {
                     handleJoinInsertAsSuccessor(msg);
-                } else {
-                    System.out.println("Successor needs to handle the Join Request");
-                    this.sucessor.forward(msg, getContext());
                 }
-
-            } else {
-                // Else: Keys are equal: Reject join
-                JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
-                msg.requestor.tell(joinReplyMessage, getSelf());
-                System.out.println("I declined the JOIN, node that request join has same key of a node in the network!");
-                return;
             }
+
+            // TODO: error handling
+//            } else if (msg.requestorKey < this.id && this.predecessorId < msg.requestorKey) {
+//                // 2. Between predecessor and me --> add as new predecessor if current predecessor accepts
+//                handleJoinInsertAsPredecessor(msg);
+//
+//            } else if (msg.requestorKey > this.id && msg.requestorKey < this.sucessorId) {
+//                // 3. Between successor and me --> add as new successor if current successor accepts
+//                handleJoinInsertAsSuccessor(msg);
+//
+//            } else
+//
+//            } else {
+//                // Else: Keys are equal: Reject join
+//                JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
+//                msg.requestor.tell(joinReplyMessage, getSelf());
+//                System.out.println("I declined the JOIN, node that request join has same key of a node in the network!");
+//                return;
+//            }
         }
         System.out.println("I accepted a Join Request from " + msg.requestorKey);
         System.out.println("New Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
@@ -318,6 +333,8 @@ public class Node extends AbstractActor {
         JoinMessage.JoinConfirmationReply result = (JoinMessage.JoinConfirmationReply) Await.result(confirmationReqFuture, timeout.duration());
         //TODO: Handle timeout!
         if (result.accepted) {
+            System.out.println("I return a successor" + this.sucessorId);
+            System.out.println("I am " + this.id);
             JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(getSelf(), this.sucessor, true, this.id, this.sucessorId);
             msg.requestor.tell(joinReplyMessage, getSelf());
             this.sucessor = msg.requestor;
