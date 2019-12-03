@@ -15,6 +15,7 @@ import com.typesafe.config.Config;
 import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.messaging.JoinMessage;
 import org.distributed.systems.chord.messaging.KeyValue;
+import org.distributed.systems.chord.util.impl.HashUtil;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 
@@ -29,6 +30,8 @@ import java.util.Random;
 public class Node extends AbstractActor {
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+    public static final int m = 3; // Number of bits in key id's
+    public static final long AMOUNT_OF_KEYS = Math.round(Math.pow(2, m));
     static final int MEMCACHE_MIN_PORT = 11211;
     static final int MEMCACHE_MAX_PORT = 12235;
     final ActorRef manager;
@@ -60,10 +63,21 @@ public class Node extends AbstractActor {
         log.info("Starting up...     ref: " + getSelf());
 
         // Generating Id:
-        Random randomGenerator = new Random();
-        long randomInt = randomGenerator.nextInt(ChordStart.M);
-        this.id = randomInt;
-        System.out.println("Node Id " + randomInt);
+//        Random randomGenerator = new Random();
+//        long randomInt = randomGenerator.nextInt(ChordStart.M);
+        long envVal;
+        HashUtil hashUtil = new HashUtil();
+        if (System.getenv("node.id") == null) {
+            String hostName = config.getString("akka.remote.artery.canonical.hostname");
+            String port = config.getString("akka.remote.artery.canonical.port");
+              // FIXME Should be IP
+            envVal = Math.floorMod(hashUtil.hash(hostName + ":" + port), AMOUNT_OF_KEYS);
+        } else {
+            envVal = Long.parseLong(System.getenv("node.id"));
+        }
+
+        this.id = envVal;
+        System.out.println("Node Id " + this.id);
 
         if (this.type.equals("central")) {
             this.predecessor = getSelf();
