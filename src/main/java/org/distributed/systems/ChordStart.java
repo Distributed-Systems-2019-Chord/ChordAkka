@@ -14,13 +14,6 @@ public class ChordStart {
         // Create actor system
         ActorSystem system = ActorSystem.create("ChordNetwork"); // Setup actor system
 
-        System.out.println("\nStarting with Enviroment Variables:-\n");
-
-//        Map<String, String> map = System.getenv();
-//        for (Map.Entry<String, String> entry : map.entrySet()) {
-//            System.out.println("Variable Name:- " + entry.getKey() + " Value:- " + entry.getValue());
-//        }
-
         system.actorOf(Props.create(Node.class), "ChordActor");
     }
 }
