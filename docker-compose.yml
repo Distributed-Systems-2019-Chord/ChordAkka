@@ -20,5 +20,43 @@ services:
       - CHORD_CENTRAL_NODE_PORT=25520
     depends_on:
       - centralnode
-    ports:
-      - 11212:11211
+  regular02:
+    image: chord:v1
+    environment:
+      - CHORD_NODE_TYPE=regular
+      - CHORD_CENTRAL_NODE=centralnode
+      - CHORD_CENTRAL_NODE_PORT=25520
+    depends_on:
+      - centralnode
+  regular03:
+    image: chord:v1
+    environment:
+      - CHORD_NODE_TYPE=regular
+      - CHORD_CENTRAL_NODE=centralnode
+      - CHORD_CENTRAL_NODE_PORT=25520
+    depends_on:
+      - centralnode
+  regular04:
+    image: chord:v1
+    environment:
+      - CHORD_NODE_TYPE=regular
+      - CHORD_CENTRAL_NODE=centralnode
+      - CHORD_CENTRAL_NODE_PORT=25520
+    depends_on:
+      - centralnode
+  regular05:
+    image: chord:v1
+    environment:
+      - CHORD_NODE_TYPE=regular
+      - CHORD_CENTRAL_NODE=centralnode
+      - CHORD_CENTRAL_NODE_PORT=25520
+    depends_on:
+      - centralnode
+  regular06:
+    image: chord:v1
+    environment:
+      - CHORD_NODE_TYPE=regular
+      - CHORD_CENTRAL_NODE=centralnode
+      - CHORD_CENTRAL_NODE_PORT=25520
+    depends_on:
+      - centralnode
