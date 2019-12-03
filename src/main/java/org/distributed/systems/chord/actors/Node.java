@@ -22,6 +22,8 @@ import scala.concurrent.Future;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketException;
 import java.time.Duration;
 import java.util.Random;
 
@@ -65,47 +67,42 @@ public class Node extends AbstractActor {
 //        long randomInt = randomGenerator.nextInt(ChordStart.M);
         long envVal;
         HashUtil hashUtil = new HashUtil();
-        if (System.getenv("node.id") == null) {
+        if (System.getenv("NODE_ID") == null) {
             String hostName = config.getString("akka.remote.artery.canonical.hostname");
             String port = config.getString("akka.remote.artery.canonical.port");
               // FIXME Should be IP
             envVal = Math.floorMod(hashUtil.hash(hostName + ":" + port), AMOUNT_OF_KEYS);
         } else {
-            envVal = Long.parseLong(System.getenv("node.id"));
+            envVal = Long.parseLong(System.getenv("NODE_ID"));
         }
 
         this.id = envVal;
         System.out.println("Node Id " + this.id);
 
-        System.out.println(this.type);
-
         if (this.type.equals("central")) {
-            //Assumption: central node first up and never fails :D
-            // thus: node initially has it's pre and suc equal it's own identity
             this.predecessor = getSelf();
             this.predecessorId = this.id;
             this.sucessor = getSelf();
             this.sucessorId = this.id;
-
-            System.out.println("I am a central node, so I don't care about others");
+            System.out.println("Started As Central Node");
         } else {
-            // Assumption: Central node is on ip 127.0.0.1:25521 and is asked to join
+            System.out.println("Started As Regular Node");
             final String centralNodeAddress = getCentralNodeAddress();
             Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-            System.out.println("I am a regular node, so I need my central");
+            System.out.println("Looking For Central Node");
             Future<ActorRef> centralNodeFuture = getContext().actorSelection(centralNodeAddress).resolveOne(timeout);
             this.centralNode = (ActorRef) Await.result(centralNodeFuture, timeout.duration());
-            System.out.println("I found my central node");
+            System.out.println("Found Central Node");
         }
 
         if (this.centralNode != null) {
             // Request a Join
             JoinMessage.JoinRequest joinRequestMessage = new JoinMessage.JoinRequest(getSelf(), this.id);
             this.centralNode.tell(joinRequestMessage, getSelf());
-            // We need something, that ensures if this message get's lost --> everything from here on relies on msgs i guess
+            // TODO: Retry if this fails (as central node does not respond)
         }
 
-//        this.createMemCacheTCPSocket();
+        this.createMemCacheTCPSocket();
     }
 
     private String getNodeType() {
@@ -117,6 +114,11 @@ public class Node extends AbstractActor {
         return nodeType;
     }
 
+    /**
+     * Returns the akka address for the central node.
+     * This is either fed by config variables, or by enviromental variables.
+     * @return
+     */
     private String getCentralNodeAddress() {
         String centralEntityAddress = config.getString("myapp.centralEntityAddress");
         String centralEntityAddressPort = config.getString("myapp.centralEntityPort");
@@ -142,119 +144,51 @@ public class Node extends AbstractActor {
         return receiveBuilder()
                 .match(JoinMessage.JoinRequest.class, msg -> {
                     System.out.println("A node asked to join");
-
-                    if (this.predecessor == getSelf() && this.sucessor == getSelf() && this.type == "regular") {
-                        JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
-                        msg.requestor.tell(joinReplyMessage, getSelf());
-                        System.out.println("I declined the JOIN, I am a regular Node being part of no network");
-                        return;
-                    }
-
-                    if (msg.requestorKey == this.id) {
-                        JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
-                        msg.requestor.tell(joinReplyMessage, getSelf());
-                        System.out.println("I declined the JOIN, node that request join has same key!");
-                        return;
-                    }
-                    // Central Node Is The Only Node in the ring
-                    if (this.predecessor == getSelf() && this.sucessor == getSelf()) {
-                        // Easy Case: Just Join as Predecessor + Sucessor
-                        this.sucessor = msg.requestor;
-                        this.sucessorId = msg.requestorKey;
-                        this.predecessor = msg.requestor;
-                        this.predecessorId = msg.requestorKey;
-                        JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(getSelf(), getSelf(), true, this.id, this.id);
-                        msg.requestor.tell(joinReplyMessage, getSelf());
-                    } else {
-                        // FOUR cases:
-                        // 1. Smaller than predecessor -> forward this message
-                        // 2. Between predecessor and me --> ask predecessor for join confirmation and then I reply okay
-                        // 3. Between sucessor and me --> ask sucessor for join confirmation and then I reply okay
-                        // 4. Greater than successor -> forward this message
-                        if (msg.requestorKey < this.predecessorId) {
-                            // this.predecessor.forward(msg, getContext());
-                            System.out.println("I forward to predecessor!");
-
-                            // if my predecessor is bigger than i am, then the joiner needs to inserted here -> else forward
-                            if (this.id < this.predecessorId) {
-                                // TODO: Code Duplicate
-                                handleJoinRefPred(msg);
-                                return;
-
-                            } else {
-                                this.sucessor.forward(msg, getContext());
-                            }
-
-                            return;
-                        } else if (this.predecessorId < msg.requestorKey && msg.requestorKey < this.id) {
-                            handleJoinRefPred(msg);
-                        } else if (this.id < msg.requestorKey && msg.requestorKey < this.sucessorId) {
-                            handleJoinRefSucc(msg);
-                            return;
-                        } else if (this.sucessorId < msg.requestorKey) {
-                            System.out.println("I forward to sucessor!");
-                            // this.sucessor.forward(msg, getContext());
-                            // if my sucessor is smaller than i am, then the joiner needs to inserted here -> else forward
-                            if (this.sucessorId < this.id) {
-                                // TODO: Code Duplicate
-                                handleJoinRefSucc(msg);
-
-                            } else {
-                                this.sucessor.forward(msg, getContext());
-                            }
-
-                            return;
-                        } else {
-                            // Else: Keys are equal: Reject join
-                            JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
-                            msg.requestor.tell(joinReplyMessage, getSelf());
-                            System.out.println("I declined the JOIN, node that request join has same key of a node in the network!");
-                            return;
-                        }
-                    }
-                    System.out.println("I accepted the JOIN");
-                    System.out.println("Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
-                    System.out.println("Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
+                    handleJoinRequest(msg);
                 })
                 .match(JoinMessage.JoinReply.class, msg -> {
-                    System.out.println("I got a JoinReply");
                     if (msg.accepted) {
+
                         this.predecessor = msg.predecessor;
                         this.predecessorId = msg.predecessorId;
+
                         this.sucessor = msg.sucessor;
                         this.sucessorId = msg.sucessorId;
-                        System.out.println("I joined the Network");
-                        System.out.println("Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
-                        System.out.println("Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
+
+                        System.out.println("Regular Node " + this.id + " joined by receiving a JoinReply");
+                        System.out.println("My Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
+                        System.out.println("My Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
                     } else {
-                        System.out.println("Could not JOIN network, Shutting down");
+                        System.out.println("Join was not accepted for Node" + this.id);
                         getContext().stop(getSelf());
                     }
                 })
                 .match(JoinMessage.JoinConfirmationRequest.class, msg -> {
-                    System.out.println("I need to confirm a join request");
+                    // Either Successor or Predecessor wants insert a new node.
+                    System.out.println("Node" + this.id + " is requested to confirm a JoinRequest");
 
                     // Determine if a successor or predecessor
                     if (msg.newPredecessor == null && msg.newSucessor != null) {
                         // it's a successor
                         this.sucessorId = msg.newSucessorKey;
                         this.sucessor = msg.newSucessor;
-                        JoinMessage.JoinConfirmationReply confirmReplyMsg = new JoinMessage.JoinConfirmationReply(true);
-                        getContext().getSender().tell(confirmReplyMsg, ActorRef.noSender());
-                        System.out.println("I confirmed the join -- ");
-                        System.out.println("New successor: " + msg.newSucessorKey);
+                        getContext().getSender().tell(new JoinMessage.JoinConfirmationReply(true), ActorRef.noSender());
+                        System.out.println("Node " + this.id + " confirmed the JoinRequest");
+                        System.out.println("Node's " + this.id + "current predecessor: " + this.predecessorId);
+                        System.out.println("Node's " + this.id + " new successor: " + msg.newSucessorKey);
                     } else if (msg.newPredecessor != null && msg.newSucessor == null) {
                         // it's a predecessor
                         this.predecessorId = msg.newPredecessorKey;
                         this.predecessor = msg.newPredecessor;
                         JoinMessage.JoinConfirmationReply confirmReplyMsg = new JoinMessage.JoinConfirmationReply(true);
                         getContext().getSender().tell(confirmReplyMsg, ActorRef.noSender());
-                        System.out.println("I confirmed the join -- ");
-                        System.out.println("New predecessor: " + msg.newPredecessorKey);
+                        System.out.println("Node " + this.id + " confirmed the JoinRequest");
+                        System.out.println("Node's " + this.id + "current successor: " + this.sucessorId);
+                        System.out.println("Node's " + this.id + " new predecessor: " + msg.newPredecessorKey);
                     } else {
-                        // it's equal -> need to reject this!
-                        JoinMessage.JoinConfirmationReply confirmReplyMsg = new JoinMessage.JoinConfirmationReply(false);
-                        getContext().getSender().tell(confirmReplyMsg, ActorRef.noSender());
+                        // Some illegal state, decline this request
+                        System.out.println("Node " + this.id + " DECLINED the JoinRequest");
+                        getContext().getSender().tell(new JoinMessage.JoinConfirmationReply(false), ActorRef.noSender());
                     }
                 })
                 .match(Tcp.Bound.class, msg -> {
@@ -294,13 +228,101 @@ public class Node extends AbstractActor {
                 .build();
     }
 
-    private void handleJoinRefSucc(JoinMessage.JoinRequest msg) throws Exception {
+    /**
+     * This handles a join request from a node:
+     * First the Error handling for dangling node + same key is done.
+     * Then based on the requester's key it is determined if
+     * the node can be inserted from this node, or the msg needs
+     * to be forwarded to another node in the network
+     * @param msg
+     * @throws Exception
+     */
+    private void handleJoinRequest(JoinMessage.JoinRequest msg) throws Exception {
+        // Handle Error Case - Regular Node, that is not part of a network
+        if (this.predecessor == null && this.sucessor == null && this.type.equals("regular")) {
+            msg.requestor.tell(new JoinMessage.JoinReply(null, null, false), getSelf());
+            System.out.println("I declined the JOIN, I am a regular Node being part of no network");
+            return;
+        }
+
+        // Handle Error Case - Asked NodeId is already present.
+        if (msg.requestorKey == this.id) {
+            msg.requestor.tell(new JoinMessage.JoinReply(null, null, false), getSelf());
+            System.out.println("I declined the JOIN, node that request join has same key!");
+            return;
+        }
+
+
+        if (this.predecessor == getSelf() && this.sucessor == getSelf()) {
+            // Initial Situation: central node is the only node in the ring -> insert the requesting node
+            this.sucessor = msg.requestor;
+            this.sucessorId = msg.requestorKey;
+            this.predecessor = msg.requestor;
+            this.predecessorId = msg.requestorKey;
+            msg.requestor.tell(new JoinMessage.JoinReply(getSelf(), getSelf(), true, this.id, this.id), getSelf());
+        } else {
+            // Handle Cases for Chord Network with more than 1 node (4 general cases)
+            if (msg.requestorKey < this.id) {
+                if (msg.requestorKey < this.predecessorId) {
+                    // 1. Smaller than predecessor -> Either forward or handle edge case
+                    if (this.id < this.predecessorId) {
+                        // Edge Case: Join Request passing 0 in the ring ->
+                        // Current node's predecessor is bigger -> Requester can be inserted as new predecessor
+                        handleJoinInsertAsPredecessor(msg);
+                    } else {
+                        System.out.println("Predecessor needs to handle the Join Request");
+                        this.predecessor.forward(msg, getContext());
+                    }
+                } else {
+                    handleJoinInsertAsPredecessor(msg);
+                }
+
+            } else if (msg.requestorKey > this.id) {
+
+                if (msg.requestorKey > this.sucessorId) {
+                    // 4. Greater than successor -> Either forward or handle edge case
+                    if (this.sucessorId < this.id) {
+                        // Edge Case: Join Request passing 0 in the ring ->
+                        // Current node's successor is smaller -> Requester can be inserted as new successor
+                        handleJoinInsertAsSuccessor(msg);
+                    } else {
+                        System.out.println("Successor needs to handle the Join Request");
+                        this.sucessor.forward(msg, getContext());
+                    }
+                } else {
+                    handleJoinInsertAsSuccessor(msg);
+                }
+            } else {
+                // Else: Keys are equal: Reject join
+                JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
+                msg.requestor.tell(joinReplyMessage, getSelf());
+                System.out.println("I declined the JOIN, node that request join has same key of a node in the network!");
+                return;
+            }
+        }
+        System.out.println("I accepted a Join Request from " + msg.requestorKey);
+        System.out.println("New Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
+        System.out.println("New Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
+    }
+
+
+    /**
+     * Handles the case, when a requestor can be added as the sucessor of this node.
+     * This might be the case when:
+     * It's in between the node's id and the successor
+     * or when it's the requestor's key is the biggest id in the chord network.
+     * @param msg
+     * @throws Exception
+     */
+    private void handleJoinInsertAsSuccessor(JoinMessage.JoinRequest msg) throws Exception {
         JoinMessage.JoinConfirmationRequest joinConfirmationRequestMessage = new JoinMessage.JoinConfirmationRequest(msg.requestor, msg.requestorKey, null, 0);
         Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
         Future<Object> confirmationReqFuture = Patterns.ask(this.sucessor, joinConfirmationRequestMessage, timeout);
         JoinMessage.JoinConfirmationReply result = (JoinMessage.JoinConfirmationReply) Await.result(confirmationReqFuture, timeout.duration());
         //TODO: Handle timeout!
         if (result.accepted) {
+            System.out.println("I return a successor" + this.sucessorId);
+            System.out.println("I am " + this.id);
             JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(getSelf(), this.sucessor, true, this.id, this.sucessorId);
             msg.requestor.tell(joinReplyMessage, getSelf());
             this.sucessor = msg.requestor;
@@ -316,7 +338,15 @@ public class Node extends AbstractActor {
         }
     }
 
-    private void handleJoinRefPred(JoinMessage.JoinRequest msg) throws Exception {
+    /**
+     * Handles the case, when a requester can be added as the predecessor of this node.
+     * This might be the case when:
+     * It's in between the node's id and the predecessor's id
+     * or when it's the requester's key is the smallest id in the chord network.
+     * @param msg
+     * @throws Exception
+     */
+    private void handleJoinInsertAsPredecessor(JoinMessage.JoinRequest msg) throws Exception {
         JoinMessage.JoinConfirmationRequest joinConfirmationRequestMessage = new JoinMessage.JoinConfirmationRequest(null, 0, msg.requestor, msg.requestorKey);
         Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
         Future<Object> confirmationReqFuture = Patterns.ask(this.predecessor, joinConfirmationRequestMessage, timeout);
@@ -346,7 +376,6 @@ public class Node extends AbstractActor {
     private void createMemCacheTCPSocket(int port) {
 
         final ActorRef tcp = Tcp.get(getContext().getSystem()).manager();
-        // TODO: We need to expose this port to the outer world
         // Get possible hostname:
         String hostname = "localhost";
 
@@ -354,10 +383,33 @@ public class Node extends AbstractActor {
             hostname = System.getenv("HOSTNAME");
         }
 
+        // Calculate a unique port based on the id, if the port is already taken:
+        if (isPortInUse(hostname, port)) {
+            // TODO: Nicer heuristic to find a good suitable port
+            port = port + (int) this.id;
+        }
 
         InetSocketAddress tcp_socked = new InetSocketAddress(hostname, port);
         Tcp.Command tcpmsg = TcpMessage.bind(getSelf(), tcp_socked, 100);
         tcp.tell(tcpmsg, getSelf());
+    }
+
+    private boolean isPortInUse(String host, int port) {
+        // Assume no connection is possible.
+        boolean result = false;
+
+        try {
+            (new Socket(host, port)).close();
+            result = true;
+        }
+        catch(SocketException e) {
+            // Could not connect.
+        }
+        catch (Exception e) {
+            System.out.println();
+        }
+
+        return result;
     }
 
 }
