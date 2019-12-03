@@ -220,11 +220,11 @@ public class Node extends AbstractActor {
                         System.out.println("Central Received Final Ping");
                         System.out.println(msg.toString());
 
-                        // Get ActorRef 8 -> and print Table
-                        if (this.fingerTable[0].id == 8) {
-                            Thread.sleep(500);
-                            this.fingerTable[0].chordRef.tell(new Print.Request(), getSender());
-                        }
+//                        // Get ActorRef 8 -> and print Table
+//                        if (this.fingerTable[0].id == 8) {
+//                            Thread.sleep(500);
+//                            this.fingerTable[0].chordRef.tell(new Print.Request(), getSender());
+//                        }
                     } else {
                         System.out.println("Visited Node Regular" + this.id);
                         msg.appendTrace(id);
