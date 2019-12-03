@@ -28,13 +28,14 @@ class StorageActor extends AbstractActor {
 
                     ActorRef optionalSender = getContext().getSender();
                     if (optionalSender != getContext().getSystem().deadLetters()) {
-                        optionalSender.tell(new KeyValue.PutReply(), ActorRef.noSender());
+                        optionalSender.tell(new KeyValue.PutReply(key, value), ActorRef.noSender());
                     }
 
                 })
                 .match(KeyValue.Get.class, getValueMessage -> {
-                    Serializable val = this.storageService.get(getValueMessage.key);
-                    getContext().getSender().tell(new KeyValue.GetReply(val), ActorRef.noSender());
+                    long key = getValueMessage.key;
+                    Serializable val = this.storageService.get(key);
+                    getContext().getSender().tell(new KeyValue.GetReply(key, val), ActorRef.noSender());
                 })
                 .build();
     }

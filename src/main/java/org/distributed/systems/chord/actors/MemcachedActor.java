@@ -6,38 +6,55 @@ import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import akka.io.Tcp;
 import akka.io.TcpMessage;
-import akka.pattern.Patterns;
 import akka.util.ByteString;
-import akka.util.Timeout;
-import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.messaging.KeyValue;
-import scala.concurrent.Await;
-import scala.concurrent.Future;
 
-import java.io.Serializable;
-import java.time.Duration;
 import java.util.Arrays;
 
 class MemcachedActor extends AbstractActor {
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+    private final ActorRef node;
     private String previousTextCommand = "";
     private final ActorRef storageActor;
 
-    public MemcachedActor(ActorRef storageActor) {
+    private ActorRef client;
+
+    public MemcachedActor(ActorRef storageActor, ActorRef node) {
         this.storageActor = storageActor;
+        this.node = node;
     }
 
     @Override
     public Receive createReceive() {
         return receiveBuilder()
                 .match(Tcp.Received.class, msg -> {
+                    client = getSender();
                     final ByteString data = msg.data();
                     String request = data.decodeString("utf-8");
                     processMemcachedRequest(request);
                 })
                 .match(Tcp.ConnectionClosed.class, msg -> {
                     getContext().stop(getSelf());
+                })
+                .match(KeyValue.PutReply.class, putReply -> {
+                    System.out.println("OK I got PUTREPLY");
+
+                    ByteString resp = ByteString.fromString("STORED\r\n");
+                    client.tell(TcpMessage.write(resp), getSelf());
+                })
+                .match(KeyValue.GetReply.class, getReply -> {
+                    System.out.println("OK I got GETREPLY");
+
+
+                    //FIXME Isn't received by the client
+                    System.out.println("fetched payload");
+                    int payload_length = getReply.value.toString().length();
+                    ByteString getdataresp = ByteString.fromString(getReply.value.toString());
+                    // 99 is unique id
+                    ByteString getresp = ByteString.fromString("VALUE " + getReply.key + "  " + (payload_length) + "\r\n");
+                    client.tell(TcpMessage.write(getresp), getSelf());
+                    client.tell(TcpMessage.write(getdataresp), getSelf());
                 })
                 .build();
     }
@@ -72,26 +89,8 @@ class MemcachedActor extends AbstractActor {
             String[] get_options = commandLine.split(" ");
             long key = Long.valueOf(get_options[1]);
             System.out.println("Fetching payload");
-
             KeyValue.Get keyValueGetMessage = new KeyValue.Get(key);
-            Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-            Future<Object> future = Patterns.ask(this.storageActor, keyValueGetMessage, timeout);
-            KeyValue.GetReply result = (KeyValue.GetReply) Await.result(future, timeout.duration());
-
-            System.out.println("Response for get value: " + result.value.toString());
-            Serializable payload = result.value;
-            if (payload == null) {
-                System.out.println("NON payload");
-            } else {
-                System.out.println("fetched payload");
-                Integer payload_length = payload.toString().length();
-                ByteString getdataresp = ByteString.fromString(payload.toString() + "\r\n");
-                // 99 is unique id
-                ByteString getresp = ByteString.fromString("VALUE " + key + "  " + (payload_length) + " 99\r\n");
-
-                getSender().tell(TcpMessage.write(getresp), getSelf());
-                getSender().tell(TcpMessage.write(getdataresp), getSelf());
-            }
+            node.tell(keyValueGetMessage, getSelf());
         } catch (Exception e) {
             // TODO: how handle exception
             e.printStackTrace();
@@ -104,12 +103,7 @@ class MemcachedActor extends AbstractActor {
             String[] set_options = previousTextCommand.split(" ");
             long hashKey = Long.valueOf(set_options[1]);
             KeyValue.Put putValueMessage = new KeyValue.Put(hashKey, payloadTextLine);
-
-            Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-            Future<Object> future = Patterns.ask(this.storageActor, putValueMessage, timeout);
-            Await.result(future, timeout.duration());
-            ByteString resp = ByteString.fromString("STORED\r\n");
-            getSender().tell(TcpMessage.write(resp), getSelf());
+            node.tell(putValueMessage, getSelf());
         } catch (Exception e) {
             // TODO: how handle exception
             e.printStackTrace();

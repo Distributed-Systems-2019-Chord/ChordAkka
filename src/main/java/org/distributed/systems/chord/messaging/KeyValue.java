@@ -16,7 +16,12 @@ public class KeyValue {
     }
 
     public static class PutReply implements Response {
-        public PutReply() {
+        private final long key;
+        private final Serializable value;
+
+        public PutReply(long key, Serializable value) {
+            this.key = key;
+            this.value = value;
         }
     }
 
@@ -30,9 +35,12 @@ public class KeyValue {
 
     public static class GetReply implements Response {
 
+        public final long key;
+
         public final Serializable value;
 
-        public GetReply(Serializable value) {
+        public GetReply(long key, Serializable value) {
+            this.key = key;
             this.value = value;
         }
     }
