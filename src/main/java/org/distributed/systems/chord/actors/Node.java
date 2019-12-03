@@ -270,7 +270,6 @@ public class Node extends AbstractActor {
                         // Current node's predecessor is bigger -> Requester can be inserted as new predecessor
                         handleJoinInsertAsPredecessor(msg);
                     } else {
-                        //
                         System.out.println("Predecessor needs to handle the Join Request");
                         this.predecessor.forward(msg, getContext());
                     }
@@ -293,26 +292,13 @@ public class Node extends AbstractActor {
                 } else {
                     handleJoinInsertAsSuccessor(msg);
                 }
+            } else {
+                // Else: Keys are equal: Reject join
+                JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
+                msg.requestor.tell(joinReplyMessage, getSelf());
+                System.out.println("I declined the JOIN, node that request join has same key of a node in the network!");
+                return;
             }
-
-            // TODO: error handling
-//            } else if (msg.requestorKey < this.id && this.predecessorId < msg.requestorKey) {
-//                // 2. Between predecessor and me --> add as new predecessor if current predecessor accepts
-//                handleJoinInsertAsPredecessor(msg);
-//
-//            } else if (msg.requestorKey > this.id && msg.requestorKey < this.sucessorId) {
-//                // 3. Between successor and me --> add as new successor if current successor accepts
-//                handleJoinInsertAsSuccessor(msg);
-//
-//            } else
-//
-//            } else {
-//                // Else: Keys are equal: Reject join
-//                JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
-//                msg.requestor.tell(joinReplyMessage, getSelf());
-//                System.out.println("I declined the JOIN, node that request join has same key of a node in the network!");
-//                return;
-//            }
         }
         System.out.println("I accepted a Join Request from " + msg.requestorKey);
         System.out.println("New Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
