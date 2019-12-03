@@ -67,13 +67,13 @@ public class Node extends AbstractActor {
 //        long randomInt = randomGenerator.nextInt(ChordStart.M);
         long envVal;
         HashUtil hashUtil = new HashUtil();
-        if (System.getenv("node.id") == null) {
+        if (System.getenv("NODE_ID") == null) {
             String hostName = config.getString("akka.remote.artery.canonical.hostname");
             String port = config.getString("akka.remote.artery.canonical.port");
               // FIXME Should be IP
             envVal = Math.floorMod(hashUtil.hash(hostName + ":" + port), AMOUNT_OF_KEYS);
         } else {
-            envVal = Long.parseLong(System.getenv("node.id"));
+            envVal = Long.parseLong(System.getenv("NODE_ID"));
         }
 
         this.id = envVal;
