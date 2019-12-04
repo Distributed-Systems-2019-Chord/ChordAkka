@@ -104,7 +104,7 @@ public class Node extends AbstractActor {
             //Do whatever
             while (true) {
                 try {
-                    Thread.sleep(10000);
+                    Thread.sleep(5000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -118,6 +118,18 @@ public class Node extends AbstractActor {
             }
         });
         this.ticker.start();
+    }
+
+    boolean checkOverZero( long left,  long right, long value) {
+        return ((left < value && value > right) || (left > value && value < right)) && right <= left;
+    }
+
+    boolean checkInBetweenNotOverZero(long left,  long right, long value) {
+       return left < value && value < right;
+    }
+
+    boolean isBetweenExeclusive(long left,  long right, long value) {
+        return checkOverZero(left, right, value) || checkInBetweenNotOverZero(left, right, value);
     }
 
     @Override
@@ -159,11 +171,7 @@ public class Node extends AbstractActor {
                         if (this.id == this.fingerTableSuccessor().id && xId != this.id  ) {
                             this.setSuccessor(x, xId);
                             sb.append(String.format("\t New S: %4d (Single Node Network) \n", this.fingerTableSuccessor().id)  );
-                        } else if (this.fingerTableSuccessor().id < this.id && xId > this.id && xId > this.fingerTableSuccessor().id ) {
-                            //
-                            this.setSuccessor(x, xId);
-                            sb.append(String.format("\t New S: %4d \n", this.fingerTableSuccessor().id)  );
-                        } else if (this.fingerTableSuccessor().id > this.id && xId > this.id && xId < this.fingerTableSuccessor().id) {
+                        } else if (isBetweenExeclusive(this.id, this.fingerTableSuccessor().id, xId)) {
                             this.setSuccessor(x, xId);
                             sb.append(String.format("\t New S: %4d \n", this.fingerTableSuccessor().id)  );
                         }
@@ -186,14 +194,10 @@ public class Node extends AbstractActor {
                         this.predecessor = msg.ndashActorRef;
                         this.predecessorId = msg.ndashId;
                         sb.append(String.format("\t New P: %4d (P was null) \n", this.predecessorId)  );
-                    } else if (this.predecessorId > msg.ndashId && msg.ndashId < this.id) {
+                    } else if (isBetweenExeclusive(this.predecessorId, this.id, msg.ndashId)) {
                         this.predecessor = msg.ndashActorRef;
                         this.predecessorId = msg.ndashId;
-                        sb.append(String.format("\t New P: %4d (N' was between P and N) \n", this.predecessorId)  );
-                    } else if (this.predecessorId > this.id && msg.ndashId > this.predecessorId && msg.ndashId > this.id) {
-                        this.predecessor = msg.ndashActorRef;
-                        this.predecessorId = msg.ndashId;
-                        sb.append(String.format("\t New P: %4d (N' was between P and N - Over Zero Edge Case \n)", this.predecessorId)  );
+                        sb.append(String.format("\t New P: %4d (N' was between P and N \n)", this.predecessorId)  );
                     } else {
                         sb.append("P left unchanged \n");
                         System.out.println();
