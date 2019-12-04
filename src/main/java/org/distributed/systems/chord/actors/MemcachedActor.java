@@ -17,13 +17,11 @@ class MemcachedActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private final ActorRef node;
     private String previousTextCommand = "";
-    private final ActorRef storageActor;
     private HashUtil hashUtil;
 
     private ActorRef client;
 
-    public MemcachedActor(ActorRef storageActor, ActorRef node) {
-        this.storageActor = storageActor;
+    public MemcachedActor(ActorRef node) {
         this.node = node;
         this.hashUtil = new HashUtil();
     }

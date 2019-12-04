@@ -156,6 +156,7 @@ public class Node extends AbstractActor {
     /**
      * Returns the akka address for the central node.
      * This is either fed by config variables, or by enviromental variables.
+     *
      * @return
      */
     private String getCentralNodeAddress() {
@@ -252,7 +253,7 @@ public class Node extends AbstractActor {
                 .match(Connected.class, conn -> {
                     System.out.println("MemCache Client connected");
                     manager.tell(conn, getSelf());
-                    ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, this.storageActorRef, getSelf()));
+                    ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, getSelf()));
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {
@@ -272,6 +273,7 @@ public class Node extends AbstractActor {
      * Then based on the requester's key it is determined if
      * the node can be inserted from this node, or the msg needs
      * to be forwarded to another node in the network
+     *
      * @param msg
      * @throws Exception
      */
@@ -349,6 +351,7 @@ public class Node extends AbstractActor {
      * This might be the case when:
      * It's in between the node's id and the successor
      * or when it's the requestor's key is the biggest id in the chord network.
+     *
      * @param msg
      * @throws Exception
      */
@@ -381,6 +384,7 @@ public class Node extends AbstractActor {
      * This might be the case when:
      * It's in between the node's id and the predecessor's id
      * or when it's the requester's key is the smallest id in the chord network.
+     *
      * @param msg
      * @throws Exception
      */
@@ -439,11 +443,9 @@ public class Node extends AbstractActor {
         try {
             (new Socket(host, port)).close();
             result = true;
-        }
-        catch(SocketException e) {
+        } catch (SocketException e) {
             // Could not connect.
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             System.out.println();
         }
 
