@@ -8,7 +8,7 @@ public class Test {
 
     @org.junit.Test
     public void name() {
-        assertTrue(CompareUtil.between(3, true, 0, false, 6));
-        assertTrue(!CompareUtil.between(0, true, 3, false, 6));
+        assertTrue(CompareUtil.between(3, true, 0, false, 6,true));
+        assertTrue(!CompareUtil.between(0, true, 3, false, 6,true));
     }
 }

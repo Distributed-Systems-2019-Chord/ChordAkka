@@ -2,7 +2,7 @@ package org.distributed.systems.chord.util;
 
 public class CompareUtil {
 
-    public static boolean between(long beginKey, boolean includingLowerBound, long endKey, boolean includingUpperBound, long id) {
+    public static boolean between(long beginKey, boolean includingLowerBound, long endKey, boolean includingUpperBound, long id, boolean defaultValue) {
         if (beginKey > endKey) { // we go over the zero point
             if (includingLowerBound && includingUpperBound) {
                 return !(id < beginKey && id > endKey);
@@ -24,7 +24,7 @@ public class CompareUtil {
                 return (id > beginKey && id < endKey);
             }
         } else { // (endKey == beginKey)
-            return true; // There is just one node
+            return defaultValue; // There is just one node
         }
     }
 }
