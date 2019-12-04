@@ -167,7 +167,7 @@ public class Node extends AbstractActor {
                     printFingerTable();
                     //If done
                     if(reply.getIndex()==ChordStart.m -1){
-                        log.info("done");
+                        log.info("Starting update others");
                         //Start to update others
                         updateOthers(1);
                     }
@@ -177,6 +177,9 @@ public class Node extends AbstractActor {
                     }
                 })
                 .match(updateOthersReply.class, reply ->{
+                    log.info("Telling " +reply.getPredecessor().getId() +
+                            " to update finger table with id"+this.node.getId()+ " and index "+reply.getIndex());
+
                     //Tell the found predecessor to update his finger table.
                     Util.getActorRef(getContext(),reply.getPredecessor()).tell(new UpdateFingerTable(this.node,reply.getIndex()),getSelf());
 
@@ -189,9 +192,11 @@ public class Node extends AbstractActor {
                     int adjustedIndex = updateFingerTable.getIndex() -1;
                     ChordNode iNode = this.fingerTableService.getFingers().get(adjustedIndex).getSucc();
                     ChordNode s = updateFingerTable.getNode();
+                    log.info("Received an update finger table with id "+s.getId()+" and index " + updateFingerTable.getIndex());
+                    log.info("iNode is "+iNode.getId());
                     if(CompareUtil.between(this.node.getId(),true,iNode.getId(),
                             false,s.getId())){
-
+                        
                         log.info("My finger table has been updated");
                         fingerTableService.getFingers().get(adjustedIndex).setSucc(s);
                         printFingerTable();
@@ -200,10 +205,9 @@ public class Node extends AbstractActor {
                                 new UpdateFingerTable(s,updateFingerTable.getIndex()),getSelf());
                     }
                     else{
-                        log.info("My finger table has not been updated");
+                        log.info("Denied an update finger table");
                     }
                 })
-
 
                 //Send your predecessor upon a stabilize message from another node.
                 .match(Stabilize.class, stabilize -> {
@@ -264,7 +268,7 @@ public class Node extends AbstractActor {
                 printFingerTable();
             }
             else{
-                new FindPredecessorAndSuccessor(start, new initLoopReply(null,null, i));
+                getSelf().tell(new FindPredecessorAndSuccessor(start, new initLoopReply(null,null, i)),getSelf());
                 break;
             }
         }
