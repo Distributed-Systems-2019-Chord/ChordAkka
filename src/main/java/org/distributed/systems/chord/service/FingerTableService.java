@@ -39,18 +39,23 @@ public class FingerTableService {
 //        return table;
 //    }
 
-    public FingerTable initFingerTableCentral(ChordNode centralNode) {
-        FingerTable table = new FingerTable(new ArrayList<>(ChordStart.m), ChordStart.m);
+    public void initFingerTableRegular(long id){
+        for(int i=1;i<=ChordStart.m;i++){
+            long startFinger = startFinger(id,i);
+            long endFinger = startFinger(id,i+1);
+            FingerInterval interval = calcInterval(startFinger, endFinger);
+            this.fingerTable.addFinger(new Finger(startFinger, interval, null));
+        }
+    }
+    public void initFingerTableCentral(ChordNode centralNode) {
         for (int i = 1; i <= ChordStart.m; i++) {
             long startFinger = startFinger(centralNode.getId(), i);
             long endFinger = startFinger(centralNode.getId(), i + 1);
             FingerInterval interval = calcInterval(startFinger, endFinger);
-            table.addFinger(new Finger(startFinger, interval, centralNode));
+            this.fingerTable.addFinger(new Finger(startFinger, interval, centralNode));
         }
-        System.out.println("Finger table for central node generated size is " + table.getFingerList().size() + " should be " + ChordStart.m);
-        return table;
+        System.out.println("Finger table for central node generated size is " + this.fingerTable.getFingerList().size() + " should be " + ChordStart.m);
     }
-
 
     public FingerInterval calcInterval(long start1, long start2) {
         long startIndex = start1 % ChordStart.AMOUNT_OF_KEYS;
@@ -64,7 +69,6 @@ public class FingerTableService {
     }
 
     public void setSuccessor(ChordNode successor) {
-        assert !fingerTable.getFingerList().isEmpty();
         fingerTable.getFingerList().get(0).setSucc(successor);
     }
 

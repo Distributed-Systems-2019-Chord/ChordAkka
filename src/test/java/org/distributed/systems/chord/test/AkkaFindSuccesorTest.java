@@ -22,7 +22,7 @@ import java.time.Duration;
 
 public class AkkaFindSuccesorTest {
 
-    @Test
+    /*@Test
     public void closestPrecedingFinger(){
 
         //Node entries for in the finger tables
@@ -69,5 +69,5 @@ public class AkkaFindSuccesorTest {
         long expected3 = 3L;
         //long actual3 = service.closestPrecedingFinger(node3,3).getId();
         //Assert.assertEquals(expected3,actual3);
-    }
+    }*/
 }

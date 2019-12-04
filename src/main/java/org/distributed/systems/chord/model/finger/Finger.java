@@ -26,7 +26,6 @@ public class Finger {
     }
 
     public void setSucc(ChordNode succ) {
-        System.out.println("Updated succ: " + succ.getId());
         this.succ = succ;
     }
 
