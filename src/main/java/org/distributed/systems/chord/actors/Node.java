@@ -180,8 +180,13 @@ public class Node extends AbstractActor {
                     log.info("Telling " +reply.getPredecessor().getId() +
                             " to update finger table with id"+this.node.getId()+ " and index "+reply.getIndex());
 
-                    //Tell the found predecessor to update his finger table.
-                    Util.getActorRef(getContext(),reply.getPredecessor()).tell(new UpdateFingerTable(this.node,reply.getIndex()),getSelf());
+                    if(reply.getPredecessor().getId()==node.getId()){
+                        Util.getActorRef(getContext(),fingerTableService.getPredecessor()).tell(new UpdateFingerTable(this.node,reply.getIndex()),getSelf());
+                    }
+                    else{
+                        //Tell the found predecessor to update his finger table.
+                        Util.getActorRef(getContext(),reply.getPredecessor()).tell(new UpdateFingerTable(this.node,reply.getIndex()),getSelf());
+                    }
 
                     //If not done yet, continue updating others
                     if(reply.getIndex()<ChordStart.m){
@@ -192,11 +197,11 @@ public class Node extends AbstractActor {
                     int adjustedIndex = updateFingerTable.getIndex() -1;
                     ChordNode iNode = this.fingerTableService.getFingers().get(adjustedIndex).getSucc();
                     ChordNode s = updateFingerTable.getNode();
-                    log.info("Received an update finger table with id "+s.getId()+" and index " + updateFingerTable.getIndex());
+                    log.info("Received an update finger table with id "+s.getId()+" and index " + updateFingerTable.getIndex() + " from" + getSender());
                     log.info("iNode is "+iNode.getId());
-                    if(CompareUtil.between(this.node.getId(),true,iNode.getId(),
+                    if(CompareUtil.between(this.node.getId(),false,iNode.getId(),
                             false,s.getId())){
-                        
+                        log.info(s.getId() + " is between " + this.node.getId() +" and " + iNode.getId());
                         log.info("My finger table has been updated");
                         fingerTableService.getFingers().get(adjustedIndex).setSucc(s);
                         printFingerTable();
