@@ -31,7 +31,7 @@ import java.time.Duration;
 public class Node extends AbstractActor {
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-    public static final int m = 3; // Number of bits in key id's
+    public static final int m = 100; // Number of bits in key id's
     public static final long AMOUNT_OF_KEYS = Math.round(Math.pow(2, m));
     static final int MEMCACHE_MIN_PORT = 11211;
     static final int MEMCACHE_MAX_PORT = 12235;
@@ -72,7 +72,7 @@ public class Node extends AbstractActor {
             String hostName = config.getString("akka.remote.artery.canonical.hostname");
             String port = config.getString("akka.remote.artery.canonical.port");
             // FIXME Should be IP
-            envVal = Math.floorMod(hashUtil.hash(hostName + ":" + port), AMOUNT_OF_KEYS);
+            envVal = hashUtil.hash(hostName + ":" + port);
         } else {
             envVal = Long.parseLong(System.getenv("NODE_ID"));
         }
@@ -428,7 +428,7 @@ public class Node extends AbstractActor {
         // Calculate a unique port based on the id, if the port is already taken:
         if (isPortInUse(hostname, port)) {
             // TODO: Nicer heuristic to find a good suitable port
-            port = port + (int) this.id;
+            port = port + 1;//(int) this.id;
         }
 
         InetSocketAddress tcp_socked = new InetSocketAddress(hostname, port);

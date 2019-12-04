@@ -23,7 +23,8 @@ class StorageActor extends AbstractActor {
                 .match(KeyValue.Put.class, putValueMessage -> {
                     long key = putValueMessage.key;
                     Serializable value = putValueMessage.value;
-                    log.info("Put for key, value: " + key + " " + value);
+//                    log.info("Put for key, value: " + key + " " + value);
+                    System.out.println("Put for key" + key);
                     this.storageService.put(key, value);
 
                     ActorRef optionalSender = getContext().getSender();
@@ -35,6 +36,7 @@ class StorageActor extends AbstractActor {
                 .match(KeyValue.Get.class, getValueMessage -> {
                     long key = getValueMessage.key;
                     Serializable val = this.storageService.get(key);
+                    System.out.println("Get for key " + key);
                     getContext().getSender().tell(new KeyValue.GetReply(key, val), ActorRef.noSender());
                 })
                 .build();

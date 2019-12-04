@@ -7,6 +7,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
 
+import static org.distributed.systems.chord.actors.Node.AMOUNT_OF_KEYS;
+
 public class HashUtil implements IHashUtil {
 
     /**
@@ -35,7 +37,7 @@ public class HashUtil implements IHashUtil {
 //            e.printStackTrace();
 //        }
 //        return 0L;
-         return sha1;
+         return Math.floorMod(sha1, AMOUNT_OF_KEYS);
     }
 
     private static String byteToHex(final byte[] hash) {

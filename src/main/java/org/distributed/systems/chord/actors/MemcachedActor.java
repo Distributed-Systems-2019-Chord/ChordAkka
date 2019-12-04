@@ -39,17 +39,17 @@ class MemcachedActor extends AbstractActor {
                     getContext().stop(getSelf());
                 })
                 .match(KeyValue.PutReply.class, putReply -> {
-                    System.out.println("OK I got PUTREPLY");
+//                    System.out.println("OK I got PUTREPLY");
 
                     ByteString resp = ByteString.fromString("STORED\r\n");
                     client.tell(TcpMessage.write(resp), getSelf());
                 })
                 .match(KeyValue.GetReply.class, getReply -> {
-                    System.out.println("OK I got GETREPLY");
+//                    System.out.println("OK I got GETREPLY");
 
 
                     //FIXME Isn't received by the client
-                    System.out.println("fetched payload");
+//                    System.out.println("fetched payload");
                     int payload_length = getReply.value.toString().length();
                     ByteString getdataresp = ByteString.fromString(getReply.value.toString());
                     // 99 is unique id
@@ -63,7 +63,7 @@ class MemcachedActor extends AbstractActor {
     private void processMemcachedRequest(String request) {
         // Process each line that is passed:
         String[] textCommandLines = request.split("\r\n");
-        System.out.println(Arrays.toString(textCommandLines));
+//        System.out.println(Arrays.toString(textCommandLines));
 
         for (String textCommand : textCommandLines) {
             if (textCommand.startsWith("get") && !previousTextCommand.startsWith("set")) {
@@ -82,14 +82,14 @@ class MemcachedActor extends AbstractActor {
             this.previousTextCommand = textCommand;
         }
 
-        System.out.println("Handled A MemCache Request");
+//        System.out.println("Handled A MemCache Request");
     }
 
     private void handleGetCommand(String commandLine) {
         try {
             String[] get_options = commandLine.split(" ");
             long key = hashUtil.hash(get_options[1]);
-            System.out.println("Fetching payload");
+//            System.out.println("Fetching payload");
             KeyValue.Get keyValueGetMessage = new KeyValue.Get(key);
             node.tell(keyValueGetMessage, getSelf());
         } catch (Exception e) {
