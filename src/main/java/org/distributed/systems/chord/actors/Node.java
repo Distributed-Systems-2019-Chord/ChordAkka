@@ -196,11 +196,17 @@ public class Node extends AbstractActor {
                 .match(UpdateFingerTable.class, updateFingerTable -> {
                     int adjustedIndex = updateFingerTable.getIndex() -1;
                     ChordNode iNode = this.fingerTableService.getFingers().get(adjustedIndex).getSucc();
+                    long start = this.fingerTableService.startFinger(node.getId(),adjustedIndex);
+                    boolean lowerBound = false;
+                    if(node.getId()<iNode.getId()){
+                        lowerBound = true;
+                    }
                     ChordNode s = updateFingerTable.getNode();
                     log.info("Received an update finger table with id "+s.getId()+" and index " + updateFingerTable.getIndex() + " from" + getSender());
                     log.info("iNode is "+iNode.getId());
-                    if(CompareUtil.between(this.node.getId(),false,iNode.getId(),
-                            false,s.getId())){
+                    if(CompareUtil.between(this.node.getId(),lowerBound       ,iNode.getId(),
+                            false,s.getId())
+                            &&iNode.getId()!=fingerTableService.getFingers().get(adjustedIndex).getStart()){
                         log.info(s.getId() + " is between " + this.node.getId() +" and " + iNode.getId());
                         log.info("My finger table has been updated");
                         fingerTableService.getFingers().get(adjustedIndex).setSucc(s);
@@ -210,6 +216,7 @@ public class Node extends AbstractActor {
                                 new UpdateFingerTable(s,updateFingerTable.getIndex()),getSelf());
                     }
                     else{
+                        log.info(s.getId() + " is NOT between " + this.node.getId() +" and " + iNode.getId());
                         log.info("Denied an update finger table");
                     }
                 })
@@ -273,7 +280,7 @@ public class Node extends AbstractActor {
                 printFingerTable();
             }
             else{
-                getSelf().tell(new FindPredecessorAndSuccessor(start, new initLoopReply(null,null, i)),getSelf());
+                getCentralNode(getCentralNodeAddress()).tell(new FindPredecessorAndSuccessor(start, new initLoopReply(null,null, i)),getSelf());
                 break;
             }
         }
