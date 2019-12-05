@@ -175,7 +175,7 @@ public class Node extends AbstractActor {
         if (CompareUtil.between(this.predecessorId, false, this.id, true, key)) {
             return true;
         } else {
-            fingerTableSuccessor().chordRef.forward(commandMessage, getContext());
+            closest_preceding_node(key).forward(commandMessage, getContext());
             return false;
         }
     }
