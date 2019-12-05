@@ -5,7 +5,7 @@ import akka.actor.ActorRef;
 import java.io.Serializable;
 
 public class Notify {
-    public static class Request implements Command, Serializable {
+    public static class Request implements Command {
 
         public ActorRef ndashActorRef;
         public long ndashId;

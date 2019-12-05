@@ -6,7 +6,7 @@ import java.io.Serializable;
 
 public class UpdateFinger {
 
-    public static class Request implements Command, Serializable {
+    public static class Request implements Command {
         public final long fingerTableIndex;
         public final Node.FingerTableEntry fingerTableEntry;
 

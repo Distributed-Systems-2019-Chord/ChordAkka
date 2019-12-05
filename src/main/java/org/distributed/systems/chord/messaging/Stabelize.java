@@ -4,7 +4,7 @@ import java.io.Serializable;
 
 public class Stabelize {
 
-    public static class Request implements Command, Serializable {
+    public static class Request implements Command {
         public Request() {
 
         }

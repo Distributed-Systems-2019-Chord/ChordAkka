@@ -6,7 +6,7 @@ import java.io.Serializable;
 
 public class FindSuccessor {
 
-    public static class Request implements Command, Serializable {
+    public static class Request implements Command {
         public final long id;
         public final long fingerTableIndex;
 

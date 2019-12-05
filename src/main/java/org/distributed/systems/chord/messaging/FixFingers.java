@@ -6,7 +6,7 @@ import java.io.Serializable;
 
 public class FixFingers {
 
-    public static class Request implements Command, Serializable {
+    public static class Request implements Command {
         public Request() {
 
         }
