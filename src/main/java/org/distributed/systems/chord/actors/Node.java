@@ -14,7 +14,6 @@ import akka.pattern.Patterns;
 import akka.util.Timeout;
 import com.typesafe.config.Config;
 import org.distributed.systems.ChordStart;
-import org.distributed.systems.chord.messaging.Command;
 import org.distributed.systems.chord.messaging.*;
 import org.distributed.systems.chord.util.CompareUtil;
 import org.distributed.systems.chord.util.impl.HashUtil;
@@ -100,6 +99,8 @@ public class Node extends AbstractActor {
             getSelf().tell(joinRequestMessage, getSelf());
         }
 
+        this.createMemCacheTCPSocket();
+
         this.ticker = new Thread(() -> {
             //Do whatever
             while (true) {
@@ -174,7 +175,7 @@ public class Node extends AbstractActor {
         if (CompareUtil.between(this.predecessorId, false, this.id, true, key)) {
             return true;
         } else {
-            this.fingerTable[0].chordRef.forward(commandMessage, getContext());
+            fingerTableSuccessor().chordRef.forward(commandMessage, getContext());
             return false;
         }
     }
