@@ -321,7 +321,7 @@ public class Node extends AbstractActor {
         int i = r.nextInt(fingerSize);
         Finger finger = fingerTableService.getFingers().get(i);
         if (finger == null) {
-            log.info("No finger entry at index {0}", i);
+            log.info("No finger entry at index "+ i);
             return;
         }
         getSelf().tell(new FixFingers(i, finger.getStart()), getSelf());
@@ -353,11 +353,13 @@ public class Node extends AbstractActor {
 
     private ChordNode closestPrecedingFinger(long id) {
         for (int i = ChordStart.m; i >= 1; i--) {
-
-            // Is in interval?
-            long ithSucc = fingerTableService.getFingers().get(i - 1).getSucc().getId();
-            if (CompareUtil.between(node.getId(), false, id, false, ithSucc,true)) { // FIXME should be between
-                return fingerTableService.getFingers().get(i - 1).getSucc();
+            Finger ithFinger = fingerTableService.getFingers().get(i-1);
+            if(ithFinger.getSucc()!=null){
+                // Is in interval?
+                long ithSucc = ithFinger.getSucc().getId();
+                if (CompareUtil.between(node.getId(), false, id, false, ithSucc,true)) { // FIXME should be between
+                    return fingerTableService.getFingers().get(i - 1).getSucc();
+                }
             }
         }
         // Return self
