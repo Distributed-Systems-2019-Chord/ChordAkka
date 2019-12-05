@@ -233,7 +233,7 @@ public class Node extends AbstractActor {
                         getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableSuccessor().chordRef, this.fingerTableSuccessor().id, msg.fingerTableIndex), getSelf());
                     } else {
                         // this.fingerTableSuccessor().chordRef.forward(msg, getContext());
-                        ActorRef ndash = this.closest_preceding_node((int) msg.id);
+                        ActorRef ndash = this.closest_preceding_node(msg.id);
                         ndash.forward(msg, getContext());
                     }
                 })
@@ -352,7 +352,7 @@ public class Node extends AbstractActor {
         return "akka://ChordNetwork@" + centralEntityAddress + ":" + centralEntityAddressPort + "/user/ChordActor";
     }
 
-    private ActorRef closest_preceding_node(int id) {
+    private ActorRef closest_preceding_node(long id) {
         for (int i = Node.m - 1; i >= 0; i--) {
             if (this.fingerTable[i] == null)
                 continue;
