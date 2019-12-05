@@ -34,11 +34,7 @@ public class Node extends AbstractActor {
 
         // Is IP + Port
         public ActorRef chordRef;
-
-        public int port;
-
-        public String ip;
-
+        
         @Override
         public String toString() {
             return "ID " + id + " of " + chordRef.toString();
@@ -60,10 +56,11 @@ public class Node extends AbstractActor {
     private ActorRef predecessor = null;
     private long predecessorId;
 
-    private ActorRef centralNode = null;
     private String type = "";
     private long id;
     private Thread ticker;
+    private Thread fix_fingers_ticker;
+    long fix_fingers_next = 0;
 
     public Node() {
         this.manager = Tcp.get(getContext().getSystem()).manager();
@@ -117,7 +114,20 @@ public class Node extends AbstractActor {
                 getSelf().tell(new Stabelize.Request(), getSelf());
             }
         });
+
+        this.fix_fingers_ticker  = new Thread(() -> {
+            //Do whatever
+            while (true) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                getSelf().tell(new FixFingers.Request(), getSelf());
+            }
+        });
         this.ticker.start();
+        this.fix_fingers_ticker.start();
     }
 
     boolean checkOverZero( long left,  long right, long value) {
@@ -207,17 +217,21 @@ public class Node extends AbstractActor {
                 .match(FindSuccessor.Request.class, msg -> {
 
                     System.out.println("Search Successor for" + this.id);
-                    long id = msg.id;
-
-                    if ((this.id < id && this.fingerTableSuccessor().id > id) || (this.id >= this.fingerTableSuccessor().id && true)) {
+                    // +1 to do inclusive interval
+                    // Single Node Edge Case: this.id == this.succId
+                    if (this.id == this.fingerTableSuccessor().id) {
                         getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableSuccessor().chordRef, this.fingerTableSuccessor().id, msg.fingerTableIndex), getSelf());
-                        printFingerTable();
+                    } else if (isBetweenExeclusive(this.id, this.fingerTableSuccessor().id + 1, msg.id)) {
+                        getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableSuccessor().chordRef, this.fingerTableSuccessor().id, msg.fingerTableIndex), getSelf());
                     } else {
-                        this.fingerTableSuccessor().chordRef.forward(msg, getContext());
-                        //ActorRef ndash = this.closest_preceding_node((int) msg.id);
-                        //ndash.forward(msg, getContext());
+                        // this.fingerTableSuccessor().chordRef.forward(msg, getContext());
+                        ActorRef ndash = this.closest_preceding_node((int) msg.id);
+                        ndash.forward(msg, getContext());
                     }
 
+                })
+                .match(FixFingers.Request.class, msg -> {
+                    this.fix_fingers();
                 })
                 .match(UpdateFinger.Request.class, msg -> {
                     StringBuilder sb = new StringBuilder();
@@ -328,25 +342,26 @@ public class Node extends AbstractActor {
         for (int i = Node.m - 1; i >= 0; i--) {
             if (this.fingerTable[i] == null)
                 continue;
-            if (this.id < this.fingerTable[i].id && this.fingerTable[i].id < id)
+            if (isBetweenExeclusive(this.id, id, this.fingerTable[i].id))
                 return this.fingerTable[i].chordRef;
         }
         return getSelf();
     }
 
-    private void fill_finger_table() {
-        //TODO: Implement this properly - worked with correct successor + predecessor
-        System.out.println("Filling Finger Table");
-        // skip first, as it contains always the sucessor
-        for (int k = 1; k <= Node.m; k++) {
-            long idx = (long) Math.pow(2, k - 1) % (long) Math.pow(2, Node.m);
-            if (k == 1)
-                continue;
-            long lookup_id = (long) this.id + idx % (long) Math.pow(2, Node.m);
-            System.out.println("Query Now: " + this.fingerTableSuccessor().chordRef.toString() + " for successor with resp: " + lookup_id);
+    private void fix_fingers() {
+        fix_fingers_next++;
 
-            // Get The Successor For This Id
-            Future<Object> fsFuture = Patterns.ask(this.fingerTableSuccessor().chordRef, new FindSuccessor.Request(id + idx, k - 1), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+        if (fix_fingers_next > Node.m) {
+            fix_fingers_next = 1;
+        }
+        long idx = (long) Math.pow(2, fix_fingers_next - 1);
+        long lookup_id = (long) this.id + idx % (long) Math.pow(2, Node.m);
+
+        System.out.println("Fix Finger For " + lookup_id);
+        System.out.println("Query Now: " + this.fingerTableSuccessor().chordRef.toString() + " for successor with resp: " + lookup_id);
+
+        // Get The Successor For This Id
+        Future<Object> fsFuture = Patterns.ask(this.fingerTableSuccessor().chordRef, new FindSuccessor.Request(lookup_id, fix_fingers_next - 1), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
             fsFuture.onComplete(
                     new OnComplete<Object>() {
                         public void onComplete(Throwable failure, Object result) {
@@ -355,20 +370,18 @@ public class Node extends AbstractActor {
                                 System.out.println("Something went wrong");
                                 System.out.println(failure);
                             } else {
-                                // We got a result, do something with it
+
+                                System.out.println("Update Finger");
+//                                // We got a result, do something with it
                                 FindSuccessor.Reply fsrpl = (FindSuccessor.Reply) result;
                                 FingerTableEntry fte = new FingerTableEntry();
                                 fte.chordRef = fsrpl.succesor;
                                 fte.id = fsrpl.id;
-
-                                System.out.println("Found " + fte.chordRef.toString());
-                                System.out.println(fte.toString() + " " + fsrpl.id);
                                 UpdateFinger.Request ufReq = new UpdateFinger.Request(fsrpl.fingerTableIndex, fte);
                                 getSelf().tell(ufReq, getSelf());
                             }
                         }
                     }, getContext().system().dispatcher());
-        }
     }
 
     private void printFingerTable() {
