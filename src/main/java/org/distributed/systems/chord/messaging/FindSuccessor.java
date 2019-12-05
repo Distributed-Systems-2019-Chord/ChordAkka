@@ -2,15 +2,13 @@ package org.distributed.systems.chord.messaging;
 
 import akka.actor.ActorRef;
 
-import java.io.Serializable;
-
 public class FindSuccessor {
 
     public static class Request implements Command {
         public final long id;
-        public final long fingerTableIndex;
+        public final int fingerTableIndex;
 
-        public Request(Long id, long fingerTableIndex) {
+        public Request(long id, int fingerTableIndex) {
             this.id = id;
             this.fingerTableIndex = fingerTableIndex;
         }
@@ -20,9 +18,9 @@ public class FindSuccessor {
 
         public final ActorRef succesor;
         public final long id;
-        public final long fingerTableIndex;
+        public final int fingerTableIndex;
 
-        public Reply(ActorRef successor, long id, long fingerTableIndex) {
+        public Reply(ActorRef successor, long id, int fingerTableIndex) {
             this.succesor = successor;
             this.id = id;
             this.fingerTableIndex = fingerTableIndex;

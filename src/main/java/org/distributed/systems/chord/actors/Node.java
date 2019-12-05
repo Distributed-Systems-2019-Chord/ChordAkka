@@ -60,7 +60,7 @@ public class Node extends AbstractActor {
     private long id;
     private Thread ticker;
     private Thread fix_fingers_ticker;
-    long fix_fingers_next = 0;
+    private int fix_fingers_next = 0;
 
     public Node() {
         this.manager = Tcp.get(getContext().getSystem()).manager();
@@ -151,7 +151,7 @@ public class Node extends AbstractActor {
                     System.out.println("Node " + this.id + " wants to join");
 
                     Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-                    Future<Object> centralNodeFuture = Patterns.ask(msg.requestor, new FindSuccessor.Request(this.id, 0L), timeout);
+                    Future<Object> centralNodeFuture = Patterns.ask(msg.requestor, new FindSuccessor.Request(this.id, 0), timeout);
                     FindSuccessor.Reply rply = (FindSuccessor.Reply) Await.result(centralNodeFuture, timeout.duration());
 
                     this.setSuccessor(rply.succesor, rply.id);

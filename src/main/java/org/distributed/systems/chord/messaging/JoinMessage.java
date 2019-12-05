@@ -6,8 +6,8 @@ public class JoinMessage {
 
     public static class JoinRequest implements Command {
 
-        public long requestorKey;
-        public ActorRef requestor;
+        public final long requestorKey;
+        public final ActorRef requestor;
 
         public JoinRequest(ActorRef requestor, long requestorKey) {
             this.requestor = requestor;
