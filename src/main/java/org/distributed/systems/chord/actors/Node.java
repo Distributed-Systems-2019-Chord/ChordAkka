@@ -113,7 +113,7 @@ public class Node extends AbstractActor {
                 sb.append("----------------------------------------------------------------------\n");
                 sb.append("S: " + +this.fingerTable[0].id + " ActorRef:" + this.fingerTable[0].chordRef + "\n");
                 sb.append("P: " + this.predecessorId + " ActorRef: " + this.predecessor + "\n");
-                sb.append(toStringFingerTable() + "\n");
+                sb.append(toStringFingerTable());
                 sb.append("----------------------------------------------------------------------\n");
 
                 if (!this.lastTickerOutput.equals(sb.toString())) {
@@ -184,7 +184,7 @@ public class Node extends AbstractActor {
                         xId = rply.predecessorId;
                     }
 
-                    sb.append(String.format(" -> x = ' is: %4d \n", xId));
+                    sb.append(String.format(" -> x = ' is: %4d", xId));
                     // TODO: Refactor several ifs, which check x in (n , successor) including the "over-zero" case
                     if (x != null) {
                         // Node is the only one in the network (Should be removable!)
