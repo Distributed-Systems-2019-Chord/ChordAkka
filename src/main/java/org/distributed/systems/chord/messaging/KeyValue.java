@@ -4,7 +4,7 @@ import java.io.Serializable;
 
 public class KeyValue {
 
-    public static class Put implements Command, Serializable {
+    public static class Put implements Command {
         public final String key;
         public final Serializable value;
 
@@ -20,7 +20,7 @@ public class KeyValue {
         }
     }
 
-    public static class Get implements Command, Serializable {
+    public static class Get implements Command {
         public final String key;
 
         public Get(String key) {
