@@ -60,6 +60,7 @@ public class Node extends AbstractActor {
     private long id;
     private Thread ticker;
     private Thread fix_fingers_ticker;
+    private String lastTickerOutput = "";
     private int fix_fingers_next = 0;
 
     public Node() {
@@ -98,6 +99,8 @@ public class Node extends AbstractActor {
         }
 
         this.ticker = new Thread(() -> {
+
+
             //Do whatever
             while (true) {
                 try {
@@ -105,11 +108,18 @@ public class Node extends AbstractActor {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                System.out.println("----------------------------------------------------------------------");
-                System.out.println("S: " + +this.fingerTable[0].id + " ActorRef:" + this.fingerTable[0].chordRef);
-                System.out.println("P: " + this.predecessorId + " ActorRef: " + this.predecessor);
-                printFingerTable();
-                System.out.println("----------------------------------------------------------------------");
+
+                StringBuilder sb = new StringBuilder();
+                sb.append("----------------------------------------------------------------------\n");
+                sb.append("S: " + +this.fingerTable[0].id + " ActorRef:" + this.fingerTable[0].chordRef + "\n");
+                sb.append("P: " + this.predecessorId + " ActorRef: " + this.predecessor + "\n");
+                sb.append(toStringFingerTable() + "\n");
+                sb.append("----------------------------------------------------------------------\n");
+
+                if (!this.lastTickerOutput.equals(sb.toString())) {
+                    System.out.println(sb.toString());
+                    this.lastTickerOutput = sb.toString();
+                }
 
                 getSelf().tell(new Stabelize.Request(), getSelf());
             }
@@ -157,7 +167,7 @@ public class Node extends AbstractActor {
                     this.setSuccessor(rply.succesor, rply.id);
                     System.out.println("Node " + this.id + "joined! ");
                     System.out.println("S: " + this.fingerTableSuccessor());
-                    printFingerTable();
+                    System.out.println(toStringFingerTable());
                 })
                 .match(Stabelize.Request.class, msg -> {
                     StringBuilder sb = new StringBuilder();
@@ -209,8 +219,8 @@ public class Node extends AbstractActor {
                         this.predecessorId = msg.ndashId;
                         sb.append(String.format("\t New P: %4d (N' was between P and N \n)", this.predecessorId));
                     } else {
-                        sb.append("P left unchanged \n");
-                        System.out.println();
+                        // Skip output if nothing changes
+                        return;
                     }
                     System.out.println(sb.toString());
                 })
@@ -231,9 +241,16 @@ public class Node extends AbstractActor {
                     this.fix_fingers();
                 })
                 .match(UpdateFinger.Request.class, msg -> {
+
+                    // Only Update If Change Necessary:
+                    if (this.fingerTable[msg.fingerTableIndex] != null && (this.fingerTable[msg.fingerTableIndex].id == msg.fingerTableEntry.id
+                            && this.fingerTable[msg.fingerTableIndex].chordRef.equals(msg.fingerTableEntry.chordRef))) {
+                        return;
+                    }
+
                     StringBuilder sb = new StringBuilder();
                     sb.append("Updating Finger Table Entry Number " + msg.fingerTableIndex + "\n");
-                    sb.append("\t Previous Entry:\t " + this.fingerTable[(int) msg.fingerTableIndex] + "\n");
+                    sb.append("\t Previous Entry:\t " + this.fingerTable[msg.fingerTableIndex] + "\n");
                     sb.append("\t New Entry:\t " + msg.fingerTableEntry + "\n");
                     this.fingerTable[(int) msg.fingerTableIndex] = msg.fingerTableEntry;
                     System.out.println(sb.toString());
@@ -354,8 +371,6 @@ public class Node extends AbstractActor {
         long idx = (long) Math.pow(2, fix_fingers_next - 1);
         long lookup_id = (long) this.id + idx % (long) Math.pow(2, Node.m);
 
-        System.out.println("Fix Finger For " + lookup_id);
-
         // Get The Successor For This Id
         Future<Object> fsFuture = Patterns.ask(this.fingerTableSuccessor().chordRef, new FindSuccessor.Request(lookup_id, fix_fingers_next - 1), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
         fsFuture.onComplete(
@@ -377,7 +392,7 @@ public class Node extends AbstractActor {
                 }, getContext().system().dispatcher());
     }
 
-    private void printFingerTable() {
+    private String toStringFingerTable() {
         StringBuilder sb = new StringBuilder();
         sb.append("---Finger Table---\n");
         for (int i = 0; i < this.fingerTable.length; i++) {
@@ -388,7 +403,7 @@ public class Node extends AbstractActor {
             }
 
         }
-        System.out.println(sb.toString());
+        return sb.toString();
     }
 
     private void createMemCacheTCPSocket() {
