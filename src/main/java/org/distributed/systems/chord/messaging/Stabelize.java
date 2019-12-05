@@ -9,10 +9,4 @@ public class Stabelize {
 
         }
     }
-
-    public static class Reply implements Response {
-        public Reply() {
-
-        }
-    }
 }

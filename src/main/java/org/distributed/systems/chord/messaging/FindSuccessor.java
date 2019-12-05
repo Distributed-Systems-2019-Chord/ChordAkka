@@ -22,7 +22,7 @@ public class FindSuccessor {
         public final long id;
         public final long fingerTableIndex;
 
-        public Reply(ActorRef successor, long id, long fingerTableIndex ) {
+        public Reply(ActorRef successor, long id, long fingerTableIndex) {
             this.succesor = successor;
             this.id = id;
             this.fingerTableIndex = fingerTableIndex;

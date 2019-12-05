@@ -34,7 +34,7 @@ public class Node extends AbstractActor {
 
         // Is IP + Port
         public ActorRef chordRef;
-        
+
         @Override
         public String toString() {
             return "ID " + id + " of " + chordRef.toString();
@@ -106,7 +106,7 @@ public class Node extends AbstractActor {
                     e.printStackTrace();
                 }
                 System.out.println("----------------------------------------------------------------------");
-                System.out.println("S: " +  + this.fingerTable[0].id + " ActorRef:"  + this.fingerTable[0].chordRef);
+                System.out.println("S: " + +this.fingerTable[0].id + " ActorRef:" + this.fingerTable[0].chordRef);
                 System.out.println("P: " + this.predecessorId + " ActorRef: " + this.predecessor);
                 printFingerTable();
                 System.out.println("----------------------------------------------------------------------");
@@ -115,8 +115,8 @@ public class Node extends AbstractActor {
             }
         });
 
-        this.fix_fingers_ticker  = new Thread(() -> {
-            //Do whatever
+        this.fix_fingers_ticker = new Thread(() -> {
+            // Fixing Finger Tables
             while (true) {
                 try {
                     Thread.sleep(1000);
@@ -130,15 +130,15 @@ public class Node extends AbstractActor {
         this.fix_fingers_ticker.start();
     }
 
-    boolean checkOverZero( long left,  long right, long value) {
+    boolean checkOverZero(long left, long right, long value) {
         return ((left < value && value > right) || (left > value && value < right)) && right <= left;
     }
 
-    boolean checkInBetweenNotOverZero(long left,  long right, long value) {
-       return left < value && value < right;
+    boolean checkInBetweenNotOverZero(long left, long right, long value) {
+        return left < value && value < right;
     }
 
-    boolean isBetweenExeclusive(long left,  long right, long value) {
+    boolean isBetweenExeclusive(long left, long right, long value) {
         return checkOverZero(left, right, value) || checkInBetweenNotOverZero(left, right, value);
     }
 
@@ -156,12 +156,12 @@ public class Node extends AbstractActor {
 
                     this.setSuccessor(rply.succesor, rply.id);
                     System.out.println("Node " + this.id + "joined! ");
-                    System.out.println("S: "+ this.fingerTableSuccessor());
+                    System.out.println("S: " + this.fingerTableSuccessor());
                     printFingerTable();
                 })
                 .match(Stabelize.Request.class, msg -> {
                     StringBuilder sb = new StringBuilder();
-                    sb.append(String.format("Stabilize: %4d - S: %4d  P: %4s  \n", this.id, this.fingerTableSuccessor().id, (this.predecessor == null ? "x" : this.predecessorId )  ));
+                    sb.append(String.format("Stabilize: %4d - S: %4d  P: %4s  \n", this.id, this.fingerTableSuccessor().id, (this.predecessor == null ? "x" : this.predecessorId)));
 
                     // TODO: Currently blocking, and thus is stuck sometimes > prevent RPC if call same node
                     ActorRef x = this.predecessor;
@@ -174,16 +174,16 @@ public class Node extends AbstractActor {
                         xId = rply.predecessorId;
                     }
 
-                    sb.append(String.format("\t x = ' is: %4d \n", xId)  );
+                    sb.append(String.format("\t x = ' is: %4d \n", xId));
                     // TODO: Refactor several ifs, which check x in (n , successor) including the "over-zero" case
                     if (x != null) {
                         // Node is the only one in the network (Should be removable!)
-                        if (this.id == this.fingerTableSuccessor().id && xId != this.id  ) {
+                        if (this.id == this.fingerTableSuccessor().id && xId != this.id) {
                             this.setSuccessor(x, xId);
-                            sb.append(String.format("\t New S: %4d (Single Node Network) \n", this.fingerTableSuccessor().id)  );
+                            sb.append(String.format("\t New S: %4d (Single Node Network) \n", this.fingerTableSuccessor().id));
                         } else if (isBetweenExeclusive(this.id, this.fingerTableSuccessor().id, xId)) {
                             this.setSuccessor(x, xId);
-                            sb.append(String.format("\t New S: %4d \n", this.fingerTableSuccessor().id)  );
+                            sb.append(String.format("\t New S: %4d \n", this.fingerTableSuccessor().id));
                         }
                     }
                     // Notify Successor that this node might be it's new predecessor
@@ -197,17 +197,17 @@ public class Node extends AbstractActor {
                 // Notify RPC:
                 .match(Notify.Request.class, msg -> {
                     StringBuilder sb = new StringBuilder();
-                    sb.append(String.format("Notify: %4d - S: %4d  P: %4s  \n", this.id, this.fingerTableSuccessor().id, (this.predecessor == null ? "x" : this.predecessorId )  ));
-                    sb.append(String.format("\t N' is: %4d \n", msg.ndashId)  );
+                    sb.append(String.format("Notify: %4d - S: %4d  P: %4s  \n", this.id, this.fingerTableSuccessor().id, (this.predecessor == null ? "x" : this.predecessorId)));
+                    sb.append(String.format("\t N' is: %4d \n", msg.ndashId));
                     // TODO: Remove Dublicate Ifs (to conform to pseudocode)
                     if (this.predecessor == null) {
                         this.predecessor = msg.ndashActorRef;
                         this.predecessorId = msg.ndashId;
-                        sb.append(String.format("\t New P: %4d (P was null) \n", this.predecessorId)  );
+                        sb.append(String.format("\t New P: %4d (P was null) \n", this.predecessorId));
                     } else if (isBetweenExeclusive(this.predecessorId, this.id, msg.ndashId)) {
                         this.predecessor = msg.ndashActorRef;
                         this.predecessorId = msg.ndashId;
-                        sb.append(String.format("\t New P: %4d (N' was between P and N \n)", this.predecessorId)  );
+                        sb.append(String.format("\t New P: %4d (N' was between P and N \n)", this.predecessorId));
                     } else {
                         sb.append("P left unchanged \n");
                         System.out.println();
@@ -215,8 +215,6 @@ public class Node extends AbstractActor {
                     System.out.println(sb.toString());
                 })
                 .match(FindSuccessor.Request.class, msg -> {
-
-                    System.out.println("Search Successor for" + this.id);
                     // +1 to do inclusive interval
                     // Single Node Edge Case: this.id == this.succId
                     if (this.id == this.fingerTableSuccessor().id) {
@@ -228,7 +226,6 @@ public class Node extends AbstractActor {
                         ActorRef ndash = this.closest_preceding_node((int) msg.id);
                         ndash.forward(msg, getContext());
                     }
-
                 })
                 .match(FixFingers.Request.class, msg -> {
                     this.fix_fingers();
@@ -358,30 +355,26 @@ public class Node extends AbstractActor {
         long lookup_id = (long) this.id + idx % (long) Math.pow(2, Node.m);
 
         System.out.println("Fix Finger For " + lookup_id);
-        System.out.println("Query Now: " + this.fingerTableSuccessor().chordRef.toString() + " for successor with resp: " + lookup_id);
 
         // Get The Successor For This Id
         Future<Object> fsFuture = Patterns.ask(this.fingerTableSuccessor().chordRef, new FindSuccessor.Request(lookup_id, fix_fingers_next - 1), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
-            fsFuture.onComplete(
-                    new OnComplete<Object>() {
-                        public void onComplete(Throwable failure, Object result) {
-                            if (failure != null) {
-                                // We got a failure, handle it here
-                                System.out.println("Something went wrong");
-                                System.out.println(failure);
-                            } else {
-
-                                System.out.println("Update Finger");
-//                                // We got a result, do something with it
-                                FindSuccessor.Reply fsrpl = (FindSuccessor.Reply) result;
-                                FingerTableEntry fte = new FingerTableEntry();
-                                fte.chordRef = fsrpl.succesor;
-                                fte.id = fsrpl.id;
-                                UpdateFinger.Request ufReq = new UpdateFinger.Request(fsrpl.fingerTableIndex, fte);
-                                getSelf().tell(ufReq, getSelf());
-                            }
+        fsFuture.onComplete(
+                new OnComplete<Object>() {
+                    public void onComplete(Throwable failure, Object result) {
+                        if (failure != null) {
+                            // We got a failure, handle it here
+                            System.out.println("Something went wrong");
+                            System.out.println(failure);
+                        } else {
+                            FindSuccessor.Reply fsrpl = (FindSuccessor.Reply) result;
+                            FingerTableEntry fte = new FingerTableEntry();
+                            fte.chordRef = fsrpl.succesor;
+                            fte.id = fsrpl.id;
+                            UpdateFinger.Request ufReq = new UpdateFinger.Request(fsrpl.fingerTableIndex, fte);
+                            getSelf().tell(ufReq, getSelf());
                         }
-                    }, getContext().system().dispatcher());
+                    }
+                }, getContext().system().dispatcher());
     }
 
     private void printFingerTable() {

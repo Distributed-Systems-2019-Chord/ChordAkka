@@ -16,9 +16,4 @@ public class Notify {
         }
     }
 
-    public static class Reply implements Response {
-        public Reply() {
-
-        }
-    }
 }

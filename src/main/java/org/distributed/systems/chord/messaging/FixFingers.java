@@ -12,13 +12,4 @@ public class FixFingers {
         }
     }
 
-    public static class Reply implements Response {
-        public ActorRef predecessor;
-        public long predecessorId;
-
-        public Reply(ActorRef predecessor, long predecessorId) {
-            this.predecessor = predecessor;
-            this.predecessorId = predecessorId;
-        }
-    }
 }
