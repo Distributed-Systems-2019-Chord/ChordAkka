@@ -3,6 +3,7 @@ package org.distributed.systems.chord.actors;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
+import akka.dispatch.OnComplete;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import akka.io.Tcp;
@@ -14,8 +15,7 @@ import akka.util.Timeout;
 import com.typesafe.config.Config;
 import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.messaging.Command;
-import org.distributed.systems.chord.messaging.JoinMessage;
-import org.distributed.systems.chord.messaging.KeyValue;
+import org.distributed.systems.chord.messaging.*;
 import org.distributed.systems.chord.util.CompareUtil;
 import org.distributed.systems.chord.util.impl.HashUtil;
 import scala.concurrent.Await;
@@ -30,8 +30,23 @@ import java.time.Duration;
 
 public class Node extends AbstractActor {
 
+    public class FingerTableEntry {
+
+        public long id;
+
+        // Is IP + Port
+        public ActorRef chordRef;
+
+        @Override
+        public String toString() {
+            return "ID " + id + " of " + chordRef.toString();
+        }
+    }
+
+    private FingerTableEntry[] fingerTable;
+
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-    public static final int m = 100; // Number of bits in key id's
+    public static final int m = 6; // Number of bits in key id's
     public static final long AMOUNT_OF_KEYS = Math.round(Math.pow(2, m));
     static final int MEMCACHE_MIN_PORT = 11211;
     static final int MEMCACHE_MAX_PORT = 12235;
@@ -42,11 +57,13 @@ public class Node extends AbstractActor {
 
     private ActorRef predecessor = null;
     private long predecessorId;
-    private ActorRef sucessor = null;
-    private long sucessorId;
-    private ActorRef centralNode = null;
+
     private String type = "";
     private long id;
+    private Thread ticker;
+    private Thread fix_fingers_ticker;
+    private String lastTickerOutput = "";
+    private int fix_fingers_next = 0;
 
     public Node() {
         this.manager = Tcp.get(getContext().getSystem()).manager();
@@ -62,47 +79,65 @@ public class Node extends AbstractActor {
     public void preStart() throws Exception {
         super.preStart();
         log.info("Starting up...     ref: " + getSelf());
+        this.id = getNodeId();
 
-        // Generating Id:
-//        Random randomGenerator = new Random();
-//        long randomInt = randomGenerator.nextInt(ChordStart.M);
-        long envVal;
-        HashUtil hashUtil = new HashUtil();
-        if (System.getenv("NODE_ID") == null) {
-            String hostName = config.getString("akka.remote.artery.canonical.hostname");
-            String port = config.getString("akka.remote.artery.canonical.port");
-            // FIXME Should be IP
-            envVal = hashUtil.hash(hostName + ":" + port);
-        } else {
-            envVal = Long.parseLong(System.getenv("NODE_ID"));
-        }
-
-        this.id = envVal;
-        System.out.println("Node Id " + this.id);
+        // Init the FingerTable
+        fingerTable = new FingerTableEntry[Node.m];
 
         if (this.type.equals("central")) {
-            this.predecessor = getSelf();
-            this.predecessorId = this.id;
-            this.sucessor = getSelf();
-            this.sucessorId = this.id;
-            System.out.println("Started As Central Node");
+            this.predecessor = null;
+            this.predecessorId = -1;
+            this.setSuccessor(getSelf(), this.id);
+            System.out.println("Bootstrapped Central Node");
+            getSelf().tell(new Stabelize.Request(), getSelf());
         } else {
-            System.out.println("Started As Regular Node");
             final String centralNodeAddress = getCentralNodeAddress();
             Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-            System.out.println("Looking For Central Node");
             Future<ActorRef> centralNodeFuture = getContext().actorSelection(centralNodeAddress).resolveOne(timeout);
-            this.centralNode = (ActorRef) Await.result(centralNodeFuture, timeout.duration());
-            System.out.println("Found Central Node");
+            ActorRef centralNode = (ActorRef) Await.result(centralNodeFuture, timeout.duration());
+            JoinMessage.JoinRequest joinRequestMessage = new JoinMessage.JoinRequest(centralNode, this.id);
+            System.out.println("Bootstrapped Regular Node");
+            getSelf().tell(joinRequestMessage, getSelf());
         }
 
-        if (this.centralNode != null) {
-            // Request a Join
-            JoinMessage.JoinRequest joinRequestMessage = new JoinMessage.JoinRequest(getSelf(), this.id);
-            this.centralNode.tell(joinRequestMessage, getSelf());
-            // TODO: Retry if this fails (as central node does not respond)
-        }
-        this.createMemCacheTCPSocket();
+        this.ticker = new Thread(() -> {
+            //Do whatever
+            while (true) {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                StringBuilder sb = new StringBuilder();
+                sb.append("----------------------------------------------------------------------\n");
+                sb.append("S: " + +this.fingerTable[0].id + " ActorRef:" + this.fingerTable[0].chordRef + "\n");
+                sb.append("P: " + this.predecessorId + " ActorRef: " + this.predecessor + "\n");
+                sb.append(toStringFingerTable());
+                sb.append("----------------------------------------------------------------------\n");
+
+                if (!this.lastTickerOutput.equals(sb.toString())) {
+                    System.out.println(sb.toString());
+                    this.lastTickerOutput = sb.toString();
+                }
+
+                getSelf().tell(new Stabelize.Request(), getSelf());
+            }
+        });
+
+        this.fix_fingers_ticker = new Thread(() -> {
+            // Fixing Finger Tables
+            while (true) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                getSelf().tell(new FixFingers.Request(), getSelf());
+            }
+        });
+        this.ticker.start();
+        this.fix_fingers_ticker.start();
     }
 
     private void getValueForKey(long key) {
@@ -139,42 +174,21 @@ public class Node extends AbstractActor {
         if (CompareUtil.between(this.predecessorId, false, this.id, true, key)) {
             return true;
         } else {
-            this.sucessor.forward(commandMessage, getContext());
+            this.fingerTable[0].chordRef.forward(commandMessage, getContext());
             return false;
         }
     }
 
-    private String getNodeType() {
-        String nodeType = config.getString("myapp.nodeType");
-
-        if (System.getenv("CHORD_NODE_TYPE") != null) {
-            nodeType = System.getenv("CHORD_NODE_TYPE");
-        }
-        return nodeType;
+    boolean checkOverZero(long left, long right, long value) {
+        return ((left < value && value > right) || (left > value && value < right)) && right <= left;
     }
 
-    /**
-     * Returns the akka address for the central node.
-     * This is either fed by config variables, or by enviromental variables.
-     *
-     * @return
-     */
-    private String getCentralNodeAddress() {
-        String centralEntityAddress = config.getString("myapp.centralEntityAddress");
-        String centralEntityAddressPort = config.getString("myapp.centralEntityPort");
-        if (System.getenv("CHORD_CENTRAL_NODE") != null) {
-            centralEntityAddress = System.getenv("CHORD_CENTRAL_NODE");
-            centralEntityAddressPort = System.getenv("CHORD_CENTRAL_NODE_PORT");
-            try {
-                InetAddress address = InetAddress.getByName(centralEntityAddress);
-                centralEntityAddress = address.getHostAddress();
-                System.out.println(address.getHostAddress());
-            } catch (Exception e) {
-                // TODO: need to handle
-            }
-        }
+    boolean checkInBetweenNotOverZero(long left, long right, long value) {
+        return left < value && value < right;
+    }
 
-        return "akka://ChordNetwork@" + centralEntityAddress + ":" + centralEntityAddressPort + "/user/ChordActor";
+    boolean isBetweenExeclusive(long left, long right, long value) {
+        return checkOverZero(left, right, value) || checkInBetweenNotOverZero(left, right, value);
     }
 
     @Override
@@ -183,53 +197,103 @@ public class Node extends AbstractActor {
 
         return receiveBuilder()
                 .match(JoinMessage.JoinRequest.class, msg -> {
-                    System.out.println("A node asked to join");
-                    handleJoinRequest(msg);
+                    System.out.println("Node " + this.id + " wants to join");
+
+                    Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+                    Future<Object> centralNodeFuture = Patterns.ask(msg.requestor, new FindSuccessor.Request(this.id, 0), timeout);
+                    FindSuccessor.Reply rply = (FindSuccessor.Reply) Await.result(centralNodeFuture, timeout.duration());
+
+                    this.setSuccessor(rply.succesor, rply.id);
+                    System.out.println("Node " + this.id + "joined! ");
+                    System.out.println("S: " + this.fingerTableSuccessor());
+                    System.out.println(toStringFingerTable());
                 })
-                .match(JoinMessage.JoinReply.class, msg -> {
-                    if (msg.accepted) {
+                .match(Stabelize.Request.class, msg -> {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append(String.format("Stabilize: %4d - S: %4d  P: %4s  ", this.id, this.fingerTableSuccessor().id, (this.predecessor == null ? "x" : this.predecessorId)));
 
-                        this.predecessor = msg.predecessor;
-                        this.predecessorId = msg.predecessorId;
+                    // TODO: Currently blocking, and thus is stuck sometimes > prevent RPC if call same node
+                    ActorRef x = this.predecessor;
+                    long xId = this.predecessorId;
+                    if (getSelf() != this.fingerTable[0].chordRef) {
+                        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+                        Future<Object> fsFuture = Patterns.ask(this.fingerTable[0].chordRef, new Predecessor.Request(), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+                        Predecessor.Reply rply = (Predecessor.Reply) Await.result(fsFuture, timeout.duration());
+                        x = rply.predecessor;
+                        xId = rply.predecessorId;
+                    }
 
-                        this.sucessor = msg.sucessor;
-                        this.sucessorId = msg.sucessorId;
-
-                        System.out.println("Regular Node " + this.id + " joined by receiving a JoinReply");
-                        System.out.println("My Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
-                        System.out.println("My Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
+                    sb.append(String.format(" -> x = ' is: %4d", xId));
+                    // TODO: Refactor several ifs, which check x in (n , successor) including the "over-zero" case
+                    if (x != null) {
+                        // Node is the only one in the network (Should be removable!)
+                        if (this.id == this.fingerTableSuccessor().id && xId != this.id) {
+                            this.setSuccessor(x, xId);
+                            sb.append(String.format("\t New S: %4d (Single Node Network) \n", this.fingerTableSuccessor().id));
+                        } else if (isBetweenExeclusive(this.id, this.fingerTableSuccessor().id, xId)) {
+                            this.setSuccessor(x, xId);
+                            sb.append(String.format("\t New S: %4d \n", this.fingerTableSuccessor().id));
+                        }
+                    }
+                    // Notify Successor that this node might be it's new predecessor
+                    this.fingerTableSuccessor().chordRef.tell(new Notify.Request(getSelf(), this.id), getSelf());
+                    System.out.println(sb.toString());
+                })
+                // .predecessor RPC
+                .match(Predecessor.Request.class, msg -> {
+                    getSender().tell(new Predecessor.Reply(this.predecessor, this.predecessorId), getSelf());
+                })
+                // Notify RPC:
+                .match(Notify.Request.class, msg -> {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append(String.format("Notify: %4d - S: %4d  P: %4s  \n", this.id, this.fingerTableSuccessor().id, (this.predecessor == null ? "x" : this.predecessorId)));
+                    sb.append(String.format("\t N' is: %4d \n", msg.ndashId));
+                    // TODO: Remove Dublicate Ifs (to conform to pseudocode)
+                    if (this.predecessor == null) {
+                        this.predecessor = msg.ndashActorRef;
+                        this.predecessorId = msg.ndashId;
+                        sb.append(String.format("\t New P: %4d (P was null) \n", this.predecessorId));
+                    } else if (isBetweenExeclusive(this.predecessorId, this.id, msg.ndashId)) {
+                        this.predecessor = msg.ndashActorRef;
+                        this.predecessorId = msg.ndashId;
+                        sb.append(String.format("\t New P: %4d (N' was between P and N \n)", this.predecessorId));
                     } else {
-                        System.out.println("Join was not accepted for Node" + this.id);
-                        getContext().stop(getSelf());
+                        // Skip output if nothing changes
+                        return;
+                    }
+                    System.out.println(sb.toString());
+                })
+                .match(FindSuccessor.Request.class, msg -> {
+                    // +1 to do inclusive interval
+                    // Single Node Edge Case: this.id == this.succId
+                    if (this.id == this.fingerTableSuccessor().id) {
+                        getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableSuccessor().chordRef, this.fingerTableSuccessor().id, msg.fingerTableIndex), getSelf());
+                    } else if (isBetweenExeclusive(this.id, this.fingerTableSuccessor().id + 1, msg.id)) {
+                        getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableSuccessor().chordRef, this.fingerTableSuccessor().id, msg.fingerTableIndex), getSelf());
+                    } else {
+                        // this.fingerTableSuccessor().chordRef.forward(msg, getContext());
+                        ActorRef ndash = this.closest_preceding_node(msg.id);
+                        ndash.forward(msg, getContext());
                     }
                 })
-                .match(JoinMessage.JoinConfirmationRequest.class, msg -> {
-                    // Either Successor or Predecessor wants insert a new node.
-                    System.out.println("Node" + this.id + " is requested to confirm a JoinRequest");
+                .match(FixFingers.Request.class, msg -> {
+                    this.fix_fingers();
+                })
+                .match(UpdateFinger.Request.class, msg -> {
 
-                    // Determine if a successor or predecessor
-                    if (msg.newPredecessor == null && msg.newSucessor != null) {
-                        // it's a successor
-                        this.sucessorId = msg.newSucessorKey;
-                        this.sucessor = msg.newSucessor;
-                        getContext().getSender().tell(new JoinMessage.JoinConfirmationReply(true), ActorRef.noSender());
-                        System.out.println("Node " + this.id + " confirmed the JoinRequest");
-                        System.out.println("Node's " + this.id + "current predecessor: " + this.predecessorId);
-                        System.out.println("Node's " + this.id + " new successor: " + msg.newSucessorKey);
-                    } else if (msg.newPredecessor != null && msg.newSucessor == null) {
-                        // it's a predecessor
-                        this.predecessorId = msg.newPredecessorKey;
-                        this.predecessor = msg.newPredecessor;
-                        JoinMessage.JoinConfirmationReply confirmReplyMsg = new JoinMessage.JoinConfirmationReply(true);
-                        getContext().getSender().tell(confirmReplyMsg, ActorRef.noSender());
-                        System.out.println("Node " + this.id + " confirmed the JoinRequest");
-                        System.out.println("Node's " + this.id + "current successor: " + this.sucessorId);
-                        System.out.println("Node's " + this.id + " new predecessor: " + msg.newPredecessorKey);
-                    } else {
-                        // Some illegal state, decline this request
-                        System.out.println("Node " + this.id + " DECLINED the JoinRequest");
-                        getContext().getSender().tell(new JoinMessage.JoinConfirmationReply(false), ActorRef.noSender());
+                    // Only Update If Change Necessary:
+                    if (this.fingerTable[msg.fingerTableIndex] != null && (this.fingerTable[msg.fingerTableIndex].id == msg.fingerTableEntry.id
+                            && this.fingerTable[msg.fingerTableIndex].chordRef.equals(msg.fingerTableEntry.chordRef))) {
+                        return;
                     }
+
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("Updating Finger Table Entry Number " + msg.fingerTableIndex + "\n");
+                    sb.append("\t Previous Entry:\t " + this.fingerTable[msg.fingerTableIndex] + "\n");
+                    sb.append("\t New Entry:\t " + msg.fingerTableEntry + "\n");
+                    this.fingerTable[(int) msg.fingerTableIndex] = msg.fingerTableEntry;
+                    System.out.println(sb.toString());
+
                 })
                 .match(Tcp.Bound.class, msg -> {
                     // This will be called, when the SystemActor bound MemCache interface for the particular node.
@@ -267,147 +331,117 @@ public class Node extends AbstractActor {
                 .build();
     }
 
-    /**
-     * This handles a join request from a node:
-     * First the Error handling for dangling node + same key is done.
-     * Then based on the requester's key it is determined if
-     * the node can be inserted from this node, or the msg needs
-     * to be forwarded to another node in the network
-     *
-     * @param msg
-     * @throws Exception
-     */
-    private void handleJoinRequest(JoinMessage.JoinRequest msg) throws Exception {
-        // Handle Error Case - Regular Node, that is not part of a network
-        if (this.predecessor == null && this.sucessor == null && this.type.equals("regular")) {
-            msg.requestor.tell(new JoinMessage.JoinReply(null, null, false), getSelf());
-            System.out.println("I declined the JOIN, I am a regular Node being part of no network");
-            return;
-        }
+    private FingerTableEntry fingerTableSuccessor() {
+        return this.fingerTable[0];
+    }
 
-        // Handle Error Case - Asked NodeId is already present.
-        if (msg.requestorKey == this.id) {
-            msg.requestor.tell(new JoinMessage.JoinReply(null, null, false), getSelf());
-            System.out.println("I declined the JOIN, node that request join has same key!");
-            return;
-        }
+    private void setSuccessor(ActorRef af, long id) {
+        FingerTableEntry fte = new FingerTableEntry();
+        fte.chordRef = af;
+        fte.id = id;
+        this.fingerTable[0] = fte;
+    }
 
-
-        if (this.predecessor == getSelf() && this.sucessor == getSelf()) {
-            // Initial Situation: central node is the only node in the ring -> insert the requesting node
-            this.sucessor = msg.requestor;
-            this.sucessorId = msg.requestorKey;
-            this.predecessor = msg.requestor;
-            this.predecessorId = msg.requestorKey;
-            msg.requestor.tell(new JoinMessage.JoinReply(getSelf(), getSelf(), true, this.id, this.id), getSelf());
+    private long getNodeId() {
+        long envVal;
+        HashUtil hashUtil = new HashUtil();
+        if (System.getenv("NODE_ID") == null) {
+            String hostName = config.getString("akka.remote.artery.canonical.hostname");
+            String port = config.getString("akka.remote.artery.canonical.port");
+            // FIXME Should be IP
+            envVal = Math.floorMod(hashUtil.hash(hostName + ":" + port), AMOUNT_OF_KEYS);
         } else {
-            // Handle Cases for Chord Network with more than 1 node (4 general cases)
-            if (msg.requestorKey < this.id) {
-                if (msg.requestorKey < this.predecessorId) {
-                    // 1. Smaller than predecessor -> Either forward or handle edge case
-                    if (this.id < this.predecessorId) {
-                        // Edge Case: Join Request passing 0 in the ring ->
-                        // Current node's predecessor is bigger -> Requester can be inserted as new predecessor
-                        handleJoinInsertAsPredecessor(msg);
-                    } else {
-                        System.out.println("Predecessor needs to handle the Join Request");
-                        this.predecessor.forward(msg, getContext());
-                    }
-                } else {
-                    handleJoinInsertAsPredecessor(msg);
-                }
+            envVal = Long.parseLong(System.getenv("NODE_ID"));
+        }
 
-            } else if (msg.requestorKey > this.id) {
+        return envVal;
+    }
 
-                if (msg.requestorKey > this.sucessorId) {
-                    // 4. Greater than successor -> Either forward or handle edge case
-                    if (this.sucessorId < this.id) {
-                        // Edge Case: Join Request passing 0 in the ring ->
-                        // Current node's successor is smaller -> Requester can be inserted as new successor
-                        handleJoinInsertAsSuccessor(msg);
-                    } else {
-                        System.out.println("Successor needs to handle the Join Request");
-                        this.sucessor.forward(msg, getContext());
-                    }
-                } else {
-                    handleJoinInsertAsSuccessor(msg);
-                }
-            } else {
-                // Else: Keys are equal: Reject join
-                JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
-                msg.requestor.tell(joinReplyMessage, getSelf());
-                System.out.println("I declined the JOIN, node that request join has same key of a node in the network!");
-                return;
+    private String getNodeType() {
+        String nodeType = config.getString("myapp.nodeType");
+
+        if (System.getenv("CHORD_NODE_TYPE") != null) {
+            nodeType = System.getenv("CHORD_NODE_TYPE");
+        }
+        return nodeType;
+    }
+
+    /**
+     * Returns the akka address for the central node.
+     * This is either fed by config variables, or by enviromental variables.
+     *
+     * @return
+     */
+    private String getCentralNodeAddress() {
+        String centralEntityAddress = config.getString("myapp.centralEntityAddress");
+        String centralEntityAddressPort = config.getString("myapp.centralEntityPort");
+        if (System.getenv("CHORD_CENTRAL_NODE") != null) {
+            centralEntityAddress = System.getenv("CHORD_CENTRAL_NODE");
+            centralEntityAddressPort = System.getenv("CHORD_CENTRAL_NODE_PORT");
+            try {
+                InetAddress address = InetAddress.getByName(centralEntityAddress);
+                centralEntityAddress = address.getHostAddress();
+                System.out.println(address.getHostAddress());
+            } catch (Exception e) {
+                // TODO: need to handle
             }
         }
-        System.out.println("I accepted a Join Request from " + msg.requestorKey);
-        System.out.println("New Successor:" + this.sucessor.toString() + " with id:" + this.sucessorId);
-        System.out.println("New Predecessor:" + this.predecessor.toString() + " with id:" + this.predecessorId);
+
+        return "akka://ChordNetwork@" + centralEntityAddress + ":" + centralEntityAddressPort + "/user/ChordActor";
     }
 
-
-    /**
-     * Handles the case, when a requestor can be added as the sucessor of this node.
-     * This might be the case when:
-     * It's in between the node's id and the successor
-     * or when it's the requestor's key is the biggest id in the chord network.
-     *
-     * @param msg
-     * @throws Exception
-     */
-    private void handleJoinInsertAsSuccessor(JoinMessage.JoinRequest msg) throws Exception {
-        JoinMessage.JoinConfirmationRequest joinConfirmationRequestMessage = new JoinMessage.JoinConfirmationRequest(msg.requestor, msg.requestorKey, null, 0);
-        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-        Future<Object> confirmationReqFuture = Patterns.ask(this.sucessor, joinConfirmationRequestMessage, timeout);
-        JoinMessage.JoinConfirmationReply result = (JoinMessage.JoinConfirmationReply) Await.result(confirmationReqFuture, timeout.duration());
-        //TODO: Handle timeout!
-        if (result.accepted) {
-            System.out.println("I return a successor" + this.sucessorId);
-            System.out.println("I am " + this.id);
-            JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(getSelf(), this.sucessor, true, this.id, this.sucessorId);
-            msg.requestor.tell(joinReplyMessage, getSelf());
-            this.sucessor = msg.requestor;
-            this.sucessorId = msg.requestorKey;
-            System.out.println("I confirmed the final join!");
-            System.out.println("My new successor: " + msg.requestorKey);
-            return;
-        } else {
-            JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
-            msg.requestor.tell(joinReplyMessage, getSelf());
-            System.out.println("I declined the JOIN, predecessor rejected join!");
-            return;
+    private ActorRef closest_preceding_node(long id) {
+        for (int i = Node.m - 1; i >= 0; i--) {
+            if (this.fingerTable[i] == null)
+                continue;
+            if (isBetweenExeclusive(this.id, id, this.fingerTable[i].id))
+                return this.fingerTable[i].chordRef;
         }
+        return getSelf();
     }
 
-    /**
-     * Handles the case, when a requester can be added as the predecessor of this node.
-     * This might be the case when:
-     * It's in between the node's id and the predecessor's id
-     * or when it's the requester's key is the smallest id in the chord network.
-     *
-     * @param msg
-     * @throws Exception
-     */
-    private void handleJoinInsertAsPredecessor(JoinMessage.JoinRequest msg) throws Exception {
-        JoinMessage.JoinConfirmationRequest joinConfirmationRequestMessage = new JoinMessage.JoinConfirmationRequest(null, 0, msg.requestor, msg.requestorKey);
-        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-        Future<Object> confirmationReqFuture = Patterns.ask(this.predecessor, joinConfirmationRequestMessage, timeout);
-        JoinMessage.JoinConfirmationReply result = (JoinMessage.JoinConfirmationReply) Await.result(confirmationReqFuture, timeout.duration());
-        //TODO: Handle timeout!
-        if (result.accepted) {
-            JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(this.predecessor, getSelf(), true, this.predecessorId, this.id);
-            msg.requestor.tell(joinReplyMessage, getSelf());
-            this.predecessor = msg.requestor;
-            this.predecessorId = msg.requestorKey;
-            System.out.println("I confirmed the final join!");
-            System.out.println("My new predecessor: " + msg.requestorKey);
-            return;
-        } else {
-            JoinMessage.JoinReply joinReplyMessage = new JoinMessage.JoinReply(null, null, false);
-            msg.requestor.tell(joinReplyMessage, getSelf());
-            System.out.println("I declined the JOIN, predecessor rejected join!");
-            return;
+    private void fix_fingers() {
+        fix_fingers_next++;
+
+        if (fix_fingers_next > Node.m) {
+            fix_fingers_next = 1;
         }
+        long idx = (long) Math.pow(2, fix_fingers_next - 1);
+        long lookup_id = (long) this.id + idx % (long) Math.pow(2, Node.m);
+
+        // Get The Successor For This Id
+        Future<Object> fsFuture = Patterns.ask(this.fingerTableSuccessor().chordRef, new FindSuccessor.Request(lookup_id, fix_fingers_next - 1), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+        fsFuture.onComplete(
+                new OnComplete<Object>() {
+                    public void onComplete(Throwable failure, Object result) {
+                        if (failure != null) {
+                            // We got a failure, handle it here
+                            System.out.println("Something went wrong");
+                            System.out.println(failure);
+                        } else {
+                            FindSuccessor.Reply fsrpl = (FindSuccessor.Reply) result;
+                            FingerTableEntry fte = new FingerTableEntry();
+                            fte.chordRef = fsrpl.succesor;
+                            fte.id = fsrpl.id;
+                            UpdateFinger.Request ufReq = new UpdateFinger.Request(fsrpl.fingerTableIndex, fte);
+                            getSelf().tell(ufReq, getSelf());
+                        }
+                    }
+                }, getContext().system().dispatcher());
+    }
+
+    private String toStringFingerTable() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("---Finger Table---\n");
+        for (int i = 0; i < this.fingerTable.length; i++) {
+            if (this.fingerTable[i] == null) {
+                sb.append(i + " -- empty \n");
+            } else {
+                sb.append(i + " -- " + this.fingerTable[i].id + " - " + this.fingerTable[i].chordRef.toString() + "\n");
+            }
+
+        }
+        return sb.toString();
     }
 
     private void createMemCacheTCPSocket() {
@@ -428,7 +462,7 @@ public class Node extends AbstractActor {
         // Calculate a unique port based on the id, if the port is already taken:
         if (isPortInUse(hostname, port)) {
             // TODO: Nicer heuristic to find a good suitable port
-            port = port + 1;//(int) this.id;
+            port = port + (int) this.id;
         }
 
         InetSocketAddress tcp_socked = new InetSocketAddress(hostname, port);
