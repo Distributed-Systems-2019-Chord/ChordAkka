@@ -171,7 +171,7 @@ public class Node extends AbstractActor {
                 })
                 .match(Stabelize.Request.class, msg -> {
                     StringBuilder sb = new StringBuilder();
-                    sb.append(String.format("Stabilize: %4d - S: %4d  P: %4s  \n", this.id, this.fingerTableSuccessor().id, (this.predecessor == null ? "x" : this.predecessorId)));
+                    sb.append(String.format("Stabilize: %4d - S: %4d  P: %4s  ", this.id, this.fingerTableSuccessor().id, (this.predecessor == null ? "x" : this.predecessorId)));
 
                     // TODO: Currently blocking, and thus is stuck sometimes > prevent RPC if call same node
                     ActorRef x = this.predecessor;
@@ -184,7 +184,7 @@ public class Node extends AbstractActor {
                         xId = rply.predecessorId;
                     }
 
-                    sb.append(String.format("\t x = ' is: %4d \n", xId));
+                    sb.append(String.format(" -> x = ' is: %4d \n", xId));
                     // TODO: Refactor several ifs, which check x in (n , successor) including the "over-zero" case
                     if (x != null) {
                         // Node is the only one in the network (Should be removable!)
