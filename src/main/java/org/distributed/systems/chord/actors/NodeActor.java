@@ -78,41 +78,15 @@ public class NodeActor extends AbstractActor {
             System.out.println("Bootstrapped Regular NodeActor");
             getSelf().tell(joinRequestMessage, getSelf());
         }
+        // This will schedule to send the Stabilize-message
+        // to the stabilizeActor after 0ms repeating every 5000ms
+        ActorRef stabilizeActor = getContext().actorOf(Props.create(StabilizeActor.class, getSelf()));
+        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(5000), stabilizeActor, "Stabilize", getContext().system().dispatcher(), ActorRef.noSender());
 
-        //Do whatever
-        Thread ticker = new Thread(() -> {
-
-
-            //Do whatever
-            while (true) {
-                try {
-                    Thread.sleep(5000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
-                if (!this.lastTickerOutput.equals(fingerTableService.toString())) {
-                    this.lastTickerOutput = fingerTableService.toString();
-                }
-
-                getSelf().tell(new Stabelize.Request(), getSelf());
-            }
-        });
-
-        // Fixing Finger Tables
-        Thread fix_fingers_ticker = new Thread(() -> {
-            // Fixing Finger Tables
-            while (true) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                getSelf().tell(new FixFingers.Request(), getSelf());
-            }
-        });
-        ticker.start();
-        fix_fingers_ticker.start();
+        // This will schedule to send the FixFinger-message
+        // to the fixFingerActor after 0ms repeating every 1000ms
+        ActorRef fixFingerActor = getContext().actorOf(Props.create(FixFingerActor.class, getSelf()));
+        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(1000), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
     }
 
     @Override
