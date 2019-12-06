@@ -194,7 +194,7 @@ public class NodeActor extends AbstractActor {
 
                     // Only Update If Change Necessary:
                     ChordNode finger = fingerTableService.getEntryForIndex(msg.fingerTableIndex);
-                    if (finger != null && (finger.id == msg.chordNode.id && finger.chordRef.equals(msg.chordNode.chordRef))) {
+                    if (finger != null && (finger.id.equals(msg.chordNode.id) && finger.chordRef.equals(msg.chordNode.chordRef))) {
                         return;
                     }
 
@@ -256,7 +256,7 @@ public class NodeActor extends AbstractActor {
             fix_fingers_next = 1;
         }
         long idx = (long) Math.pow(2, fix_fingers_next - 1);
-        long lookup_id = this.nodeId + idx % (long) Math.pow(2, ChordStart.M);
+        long lookup_id = (this.nodeId + idx) % ChordStart.AMOUNT_OF_KEYS;
 
         // Get The Successor For This Id
         Future<Object> fsFuture = Patterns.ask(this.fingerTableService.getSuccessor().chordRef, new FindSuccessor.Request(lookup_id, fix_fingers_next - 1), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
