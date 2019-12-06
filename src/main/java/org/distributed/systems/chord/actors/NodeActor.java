@@ -36,6 +36,8 @@ public class NodeActor extends AbstractActor {
 
     private static final int MEMCACHE_MIN_PORT = 11211;
     private static final int MEMCACHE_MAX_PORT = 12235;
+    private static final int STABILIZE_SCHEDULE_TIME = 5000;
+    private static final int FIXFINGER_SCHEDULE_TIME = 1000;
     private final ActorRef manager;
 
     private ActorRef storageActorRef;
@@ -81,12 +83,12 @@ public class NodeActor extends AbstractActor {
         // This will schedule to send the Stabilize-message
         // to the stabilizeActor after 0ms repeating every 5000ms
         ActorRef stabilizeActor = getContext().actorOf(Props.create(StabilizeActor.class, getSelf()));
-        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(5000), stabilizeActor, "Stabilize", getContext().system().dispatcher(), ActorRef.noSender());
+        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(STABILIZE_SCHEDULE_TIME), stabilizeActor, "Stabilize", getContext().system().dispatcher(), ActorRef.noSender());
 
         // This will schedule to send the FixFinger-message
         // to the fixFingerActor after 0ms repeating every 1000ms
         ActorRef fixFingerActor = getContext().actorOf(Props.create(FixFingerActor.class, getSelf()));
-        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(1000), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
+        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(FIXFINGER_SCHEDULE_TIME), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
     }
 
     @Override
