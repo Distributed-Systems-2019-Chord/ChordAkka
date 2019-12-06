@@ -2,10 +2,11 @@ package org.distributed.systems.chord.actors;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
-import org.distributed.systems.chord.messaging.Stabelize;
+import org.distributed.systems.chord.messaging.Stabilize;
 
 class StabilizeActor extends AbstractActor {
-    ActorRef nodeActor;
+    private ActorRef nodeActor;
+
     public StabilizeActor(ActorRef nodeActor) {
         this.nodeActor = nodeActor;
     }
@@ -16,7 +17,7 @@ class StabilizeActor extends AbstractActor {
                 .matchEquals(
                         "Stabilize",
                         m -> {
-                            nodeActor.tell(new Stabelize.Request(), getSelf());
+                            nodeActor.tell(new Stabilize.Request(), getSelf());
                         })
                 .build();
     }

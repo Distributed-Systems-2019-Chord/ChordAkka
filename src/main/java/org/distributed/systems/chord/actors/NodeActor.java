@@ -37,25 +37,20 @@ public class NodeActor extends AbstractActor {
     private static final int MEMCACHE_MIN_PORT = 11211;
     private static final int MEMCACHE_MAX_PORT = 12235;
     private static final int STABILIZE_SCHEDULE_TIME = 5000;
-    private static final int FIXFINGER_SCHEDULE_TIME = 1000;
+    private static final int FIX_FINGER_SCHEDULE_TIME = 1000;
     private final ActorRef manager;
 
     private ActorRef storageActorRef;
     private Config config = getContext().getSystem().settings().config();
 
-    private String type = "";
+    private String type;
     private long nodeId;
-    private String lastTickerOutput = "";
     private int fix_fingers_next = 0;
 
     public NodeActor() {
         this.manager = Tcp.get(getContext().getSystem()).manager();
         this.storageActorRef = getContext().actorOf(Props.create(StorageActor.class));
         this.type = Util.getNodeType(config);
-    }
-
-    public static Props props(ActorRef manager) {
-        return Props.create(NodeActor.class, manager);
     }
 
     @Override
@@ -70,7 +65,7 @@ public class NodeActor extends AbstractActor {
         if (this.type.equals("central")) {
             fingerTableService.setSuccessor(new ChordNode(this.nodeId, getSelf()));
             System.out.println("Bootstrapped Central NodeActor");
-            getSelf().tell(new Stabelize.Request(), getSelf());
+            getSelf().tell(new Stabilize.Request(), getSelf());
         } else {
             final String centralNodeAddress = Util.getCentralNodeAddress(config);
             Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
@@ -88,7 +83,7 @@ public class NodeActor extends AbstractActor {
         // This will schedule to send the FixFinger-message
         // to the fixFingerActor after 0ms repeating every 1000ms
         ActorRef fixFingerActor = getContext().actorOf(Props.create(FixFingerActor.class, getSelf()));
-        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(FIXFINGER_SCHEDULE_TIME), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
+        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(FIX_FINGER_SCHEDULE_TIME), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
     }
 
     @Override
@@ -108,7 +103,7 @@ public class NodeActor extends AbstractActor {
                     System.out.println("Successor: " + this.fingerTableService.getSuccessor());
                     System.out.println(fingerTableService.toString());
                 })
-                .match(Stabelize.Request.class, msg -> {
+                .match(Stabilize.Request.class, msg -> {
 
                     // TODO: Currently blocking, and thus is stuck sometimes > prevent RPC if call same node
                     ChordNode x = fingerTableService.getPredecessor();
@@ -134,12 +129,9 @@ public class NodeActor extends AbstractActor {
                     System.out.println(fingerTableService.toString());
                 })
                 // .predecessor RPC
-                .match(Predecessor.Request.class, msg -> {
-                    getSender().tell(new Predecessor.Reply(fingerTableService.getPredecessor()), getSelf());
-                })
+                .match(Predecessor.Request.class, msg -> getSender().tell(new Predecessor.Reply(fingerTableService.getPredecessor()), getSelf()))
                 // Notify RPC:
                 .match(Notify.Request.class, msg -> {
-                    StringBuilder sb = new StringBuilder();
                     // TODO: Remove Dublicate Ifs (to conform to pseudocode)
                     if (fingerTableService.getPredecessor().chordRef == null) {
                         fingerTableService.setPredecessor(msg.nPrime);
@@ -163,9 +155,7 @@ public class NodeActor extends AbstractActor {
                         ndash.forward(msg, getContext());
                     }
                 })
-                .match(FixFingers.Request.class, msg -> {
-                    this.fix_fingers();
-                })
+                .match(FixFingers.Request.class, msg -> this.fix_fingers())
                 .match(UpdateFinger.Request.class, msg -> {
 
                     // Only Update If Change Necessary:
@@ -200,7 +190,7 @@ public class NodeActor extends AbstractActor {
                 .match(Connected.class, conn -> {
                     System.out.println("MemCache Client connected");
                     manager.tell(conn, getSelf());
-                    ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, storageActorRef = this.storageActorRef));
+                    ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, storageActorRef));
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {
@@ -209,9 +199,7 @@ public class NodeActor extends AbstractActor {
                     log.info("key, value: " + key + " " + value);
                     this.storageActorRef.forward(putValueMessage, getContext());
                 })
-                .match(KeyValue.Get.class, getValueMessage -> {
-                    this.storageActorRef.forward(getValueMessage, getContext());
-                })
+                .match(KeyValue.Get.class, getValueMessage -> this.storageActorRef.forward(getValueMessage, getContext()))
                 .build();
     }
 
@@ -242,7 +230,7 @@ public class NodeActor extends AbstractActor {
                         if (failure != null) {
                             // We got a failure, handle it here
                             System.out.println("Something went wrong");
-                            System.out.println(failure);
+                            failure.printStackTrace();
                         } else {
                             FindSuccessor.Reply fsrpl = (FindSuccessor.Reply) result;
                             ChordNode fte = new ChordNode(fsrpl.id, fsrpl.succesor);

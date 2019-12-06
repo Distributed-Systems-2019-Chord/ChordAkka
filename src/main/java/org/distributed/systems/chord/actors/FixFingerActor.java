@@ -5,7 +5,8 @@ import akka.actor.ActorRef;
 import org.distributed.systems.chord.messaging.FixFingers;
 
 class FixFingerActor extends AbstractActor {
-    ActorRef nodeActor;
+    private ActorRef nodeActor;
+
     public FixFingerActor(ActorRef nodeActor) {
         this.nodeActor = nodeActor;
     }

@@ -1,8 +1,6 @@
 package org.distributed.systems.chord.messaging;
 
-import java.io.Serializable;
-
-public class Stabelize {
+public class Stabilize {
 
     public static class Request implements Command {
         public Request() {
