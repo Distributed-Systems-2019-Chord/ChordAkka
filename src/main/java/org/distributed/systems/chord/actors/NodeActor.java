@@ -86,6 +86,45 @@ public class NodeActor extends AbstractActor {
         getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(FIX_FINGER_SCHEDULE_TIME), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
     }
 
+    private void getValueForKey(long key) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(key, new KeyValue.Get(key))) {
+            getValueFromStorageActor(key);
+        }
+    }
+
+    private void getValueFromStorageActor(long key) {
+        KeyValue.Get getRequest = new KeyValue.Get(key);
+        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+        Future<Object> valueResponse = Patterns.ask(this.storageActorRef, getRequest, timeout);
+        try {
+            Serializable value = ((KeyValue.GetReply) Await.result(valueResponse, timeout.duration())).value;
+            getSender().tell(new KeyValue.GetReply(key, value), getSelf());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void putValueForKey(long key, Serializable value) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(key, new KeyValue.Put(key, value))) {
+            putValueInStore(key, value);
+            getSender().tell(new KeyValue.PutReply(key, value), getSelf());
+        }
+    }
+
+    private void putValueInStore(long key, Serializable value) {
+        storageActorRef.tell(new KeyValue.Put(key, value), getSelf());
+    }
+
+    private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
+        // Between my predecessor and my node id
+        if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, nodeId + 1, key)) {
+            return true;
+        } else {
+            closest_preceding_node(key).forward(commandMessage, getContext());
+            return false;
+        }
+    }
+
     @Override
     public Receive createReceive() {
         log.info("Received a message");
@@ -120,7 +159,7 @@ public class NodeActor extends AbstractActor {
                         // NodeActor is the only one in the network (Should be removable!)
                         if (this.nodeId == this.fingerTableService.getSuccessor().id && x.id != this.nodeId) {
                             fingerTableService.setSuccessor(x);
-                        } else if (CompareUtil.isBetweenExeclusive(this.nodeId, this.fingerTableService.getSuccessor().id, x.id)) {
+                        } else if (CompareUtil.isBetweenExclusive(this.nodeId, this.fingerTableService.getSuccessor().id, x.id)) {
                             fingerTableService.setSuccessor(x);
                         }
                     }
@@ -135,7 +174,7 @@ public class NodeActor extends AbstractActor {
                     // TODO: Remove Dublicate Ifs (to conform to pseudocode)
                     if (fingerTableService.getPredecessor().chordRef == null) {
                         fingerTableService.setPredecessor(msg.nPrime);
-                    } else if (CompareUtil.isBetweenExeclusive(fingerTableService.getPredecessor().id, this.nodeId, msg.nPrime.id)) {
+                    } else if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, this.nodeId, msg.nPrime.id)) {
                         fingerTableService.setPredecessor(msg.nPrime);
                     } else {
                         // Skip output if nothing changes
@@ -148,7 +187,7 @@ public class NodeActor extends AbstractActor {
                     // Single NodeActor Edge Case: this.nodeId == this.succId
                     if (this.nodeId == this.fingerTableService.getSuccessor().id) {
                         getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableService.getSuccessor().chordRef, this.fingerTableService.getSuccessor().id, msg.fingerTableIndex), getSelf());
-                    } else if (CompareUtil.isBetweenExeclusive(this.nodeId, this.fingerTableService.getSuccessor().id + 1, msg.id)) {
+                    } else if (CompareUtil.isBetweenExclusive(this.nodeId, this.fingerTableService.getSuccessor().id + 1, msg.id)) {
                         getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableService.getSuccessor().chordRef, this.fingerTableService.getSuccessor().id, msg.fingerTableIndex), getSelf());
                     } else {
                         ActorRef ndash = this.closest_preceding_node(msg.id);
@@ -194,12 +233,11 @@ public class NodeActor extends AbstractActor {
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {
-                    String key = putValueMessage.key;
+                    long key = putValueMessage.key;
                     Serializable value = putValueMessage.value;
-                    log.info("key, value: " + key + " " + value);
-                    this.storageActorRef.forward(putValueMessage, getContext());
+                    putValueForKey(key, value);
                 })
-                .match(KeyValue.Get.class, getValueMessage -> this.storageActorRef.forward(getValueMessage, getContext()))
+                .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.key))
                 .build();
     }
 
@@ -207,7 +245,7 @@ public class NodeActor extends AbstractActor {
         for (int i = ChordStart.M - 1; i >= 0; i--) {
             if (fingerTableService.getEntryForIndex(i) == null)
                 continue;
-            if (CompareUtil.isBetweenExeclusive(this.nodeId, id, fingerTableService.getEntryForIndex(i).id))
+            if (CompareUtil.isBetweenExclusive(this.nodeId, id, fingerTableService.getEntryForIndex(i).id))
                 return fingerTableService.getEntryForIndex(i).chordRef;
         }
         return getSelf();

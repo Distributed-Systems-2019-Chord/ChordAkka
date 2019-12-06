@@ -67,7 +67,7 @@ public class FingerTableService {
                             if (succFinger == null) {
                                 return "empty\n";
                             } else {
-                                return fingerTable[fingerIndex].getStart() + "\t|\t" + fingerTable[fingerIndex].getInterval().toString() + "\t|\t" + succFinger.toString() + "\n";
+                                return fingerTable[fingerIndex].getStart() + "\t|\t" + fingerTable[fingerIndex].getInterval().toString() + "\t\t|\t" + succFinger.toString() + "\n";
                             }
                         }).collect(Collectors.joining());
 

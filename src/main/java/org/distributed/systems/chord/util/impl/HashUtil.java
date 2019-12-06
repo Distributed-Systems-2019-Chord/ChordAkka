@@ -1,13 +1,12 @@
 package org.distributed.systems.chord.util.impl;
 
+import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.util.IHashUtil;
 
 import java.io.UnsupportedEncodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
-
-import static org.distributed.systems.chord.actors.Node.AMOUNT_OF_KEYS;
 
 public class HashUtil implements IHashUtil {
 
@@ -28,7 +27,7 @@ public class HashUtil implements IHashUtil {
         } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
             e.printStackTrace();
         }
-        return Math.floorMod(sha1, AMOUNT_OF_KEYS);
+        return Math.floorMod(sha1, ChordStart.AMOUNT_OF_KEYS);
     }
 
     private static String byteToHex(final byte[] hash) {
