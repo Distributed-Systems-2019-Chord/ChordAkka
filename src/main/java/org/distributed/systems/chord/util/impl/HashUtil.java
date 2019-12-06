@@ -25,19 +25,10 @@ public class HashUtil implements IHashUtil {
             crypt.reset();
             crypt.update(input.getBytes("UTF-8"));
             sha1 = byteToLong(crypt.digest());
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch (UnsupportedEncodingException e) {
+        } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
             e.printStackTrace();
         }
-        // TODO: Messed this UP!
-//        try {
-//            throw new Exception("Not Implemented - messed up by Leonard");
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
-//        return 0L;
-         return Math.floorMod(sha1, AMOUNT_OF_KEYS);
+        return Math.floorMod(sha1, AMOUNT_OF_KEYS);
     }
 
     private static String byteToHex(final byte[] hash) {
@@ -61,7 +52,7 @@ public class HashUtil implements IHashUtil {
         }
 
         long ret = (compressed[0] & 0xFF) << 24 | (compressed[1] & 0xFF) << 16 | (compressed[2] & 0xFF) << 8 | (compressed[3] & 0xFF);
-        ret = ret & (long) 0xFFFFFFFFl;
+        ret = ret & (long) 0xFFFFFFFFL;
         return ret;
     }
 }

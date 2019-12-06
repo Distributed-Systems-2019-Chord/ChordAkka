@@ -1,16 +1,16 @@
 package org.distributed.systems.chord.messaging;
 
-import org.distributed.systems.chord.actors.Node;
+import org.distributed.systems.chord.models.ChordNode;
 
 public class UpdateFinger {
 
     public static class Request implements Command {
         public final int fingerTableIndex;
-        public final Node.FingerTableEntry fingerTableEntry;
+        public final ChordNode chordNode;
 
-        public Request(int fingerTableIndex, Node.FingerTableEntry fingerTableEntry) {
+        public Request(int fingerTableIndex, ChordNode chordNode) {
             this.fingerTableIndex = fingerTableIndex;
-            this.fingerTableEntry = fingerTableEntry;
+            this.chordNode = chordNode;
         }
     }
 
