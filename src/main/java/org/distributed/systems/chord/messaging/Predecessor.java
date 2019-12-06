@@ -1,8 +1,6 @@
 package org.distributed.systems.chord.messaging;
 
-import akka.actor.ActorRef;
-
-import java.io.Serializable;
+import org.distributed.systems.chord.models.ChordNode;
 
 public class Predecessor {
     public static class Request implements Command {
@@ -12,12 +10,10 @@ public class Predecessor {
     }
 
     public static class Reply implements Response {
-        public ActorRef predecessor;
-        public long predecessorId;
+        public ChordNode predecessor;
 
-        public Reply(ActorRef predecessor, long predecessorId) {
+        public Reply(ChordNode predecessor) {
             this.predecessor = predecessor;
-            this.predecessorId = predecessorId;
         }
     }
 }

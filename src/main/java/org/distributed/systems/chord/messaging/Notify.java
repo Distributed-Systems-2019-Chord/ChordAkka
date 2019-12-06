@@ -1,18 +1,14 @@
 package org.distributed.systems.chord.messaging;
 
-import akka.actor.ActorRef;
-
-import java.io.Serializable;
+import org.distributed.systems.chord.models.ChordNode;
 
 public class Notify {
     public static class Request implements Command {
 
-        public ActorRef ndashActorRef;
-        public long ndashId;
+        public final ChordNode nPrime;
 
-        public Request(ActorRef ndashActorRef, long ndashId) {
-            this.ndashActorRef = ndashActorRef;
-            this.ndashId = ndashId;
+        public Request(ChordNode nPrime) {
+            this.nPrime = nPrime;
         }
     }
 
