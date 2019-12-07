@@ -27,6 +27,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.time.Duration;
+import java.util.concurrent.TimeoutException;
 
 public class NodeActor extends AbstractActor {
 
@@ -37,6 +38,7 @@ public class NodeActor extends AbstractActor {
     private static final int MEMCACHE_MIN_PORT = 11211;
     private static final int MEMCACHE_MAX_PORT = 12235;
     private static final int STABILIZE_SCHEDULE_TIME = 5000;
+    private static final int CHECK_PREDECESSOR_SCHEDULE_TIME = 20000;
     private static final int FIX_FINGER_SCHEDULE_TIME = 1000;
     private final ActorRef manager;
 
@@ -84,6 +86,11 @@ public class NodeActor extends AbstractActor {
         // to the fixFingerActor after 0ms repeating every 1000ms
         ActorRef fixFingerActor = getContext().actorOf(Props.create(FixFingerActor.class, getSelf()));
         getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(FIX_FINGER_SCHEDULE_TIME), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
+
+        // This will schedule to send the checkPredecessor-message
+        // to the checkPredecessorActor after 0ms repeating every 5000ms
+        ActorRef checkPredecessorActor = getContext().actorOf(Props.create(CheckPredecessorActor.class, getSelf()));
+        getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(CHECK_PREDECESSOR_SCHEDULE_TIME), checkPredecessorActor, "CheckPredecessor", getContext().system().dispatcher(), ActorRef.noSender());
     }
 
     @Override
@@ -168,6 +175,18 @@ public class NodeActor extends AbstractActor {
                     System.out.println(fingerTableService.toString());
 
                 })
+                .match(CheckPredecessor.Request.class, msg -> {
+                    //TODO: implement checkPredecessor method
+                    try{
+                        check_predecessor();
+                    } catch(TimeoutException e){
+                        this.fingerTableService.setPredecessor(null);
+                    }
+
+                })
+                .match(Ping.class, msg ->{
+                    getContext().getSender().tell(new Ping.Reply(), getSelf());
+                })
                 .match(Tcp.Bound.class, msg -> {
                     // This will be called, when the SystemActor bound MemCache interface for the particular node.
                     manager.tell(msg, getSelf());
@@ -212,7 +231,34 @@ public class NodeActor extends AbstractActor {
         }
         return getSelf();
     }
+    private void check_predecessor() throws Exception, TimeoutException {
+        /*
+        if (predecessor has failed)
+            predecessor = nil
+        * */
+        Timeout timeout = Timeout.create(Duration.ofMillis(CHECK_PREDECESSOR_SCHEDULE_TIME));
+        ChordNode pred = this.fingerTableService.getPredecessor();
+        if(pred == null) return;
+        if(pred.chordRef == null) return;
+        if(pred.chordRef == getSelf()) return;
+        Future<Object> fsFuture = Patterns.ask(this.fingerTableService.getPredecessor().chordRef, new Ping.Request(), timeout);
+        fsFuture.onComplete(
+                new OnComplete<Object>() {
+                    public void onComplete(Throwable failure, Object result) {
+                        if (failure != null) {
+                            // We got a failure, handle it here
+                            System.out.println("Actor is not reachable");
+                            fingerTableService.setPredecessor(null);
 
+                        }else {
+                            Ping.Reply reply = (Ping.Reply) result;
+                            System.out.println("Actor is reachable");
+                        }
+                    }
+                }, getContext().system().dispatcher());
+
+
+    }
     private void fix_fingers() {
         fix_fingers_next++;
 
