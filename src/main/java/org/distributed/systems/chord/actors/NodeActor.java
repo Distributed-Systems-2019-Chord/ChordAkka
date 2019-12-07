@@ -62,6 +62,8 @@ public class NodeActor extends AbstractActor {
         // Init the FingerTable
         fingerTableService = new FingerTableService(this.nodeId);
 
+        createMemCacheTCPSocket();
+
         if (this.type.equals("central")) {
             fingerTableService.setSuccessor(new ChordNode(this.nodeId, getSelf()));
             System.out.println("Bootstrapped Central NodeActor");
