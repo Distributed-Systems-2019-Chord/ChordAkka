@@ -13,6 +13,7 @@ class StorageActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private StorageService storageService;
 
+
     public StorageActor() {
         this.storageService = new StorageService();
     }
@@ -21,23 +22,20 @@ class StorageActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(KeyValue.Put.class, putValueMessage -> {
-                    long key = putValueMessage.key;
+                    long hashKey = putValueMessage.hashKey;
                     Serializable value = putValueMessage.value;
-//                    log.info("Put for key, value: " + key + " " + value);
-                    System.out.println("Put for key" + key);
-                    this.storageService.put(key, value);
+                    this.storageService.put(putValueMessage.originalKey, value);
 
                     ActorRef optionalSender = getContext().getSender();
                     if (optionalSender != getContext().getSystem().deadLetters()) {
-                        optionalSender.tell(new KeyValue.PutReply(key, value), ActorRef.noSender());
+                        optionalSender.tell(new KeyValue.PutReply(putValueMessage.originalKey, hashKey, value), ActorRef.noSender());
                     }
 
                 })
                 .match(KeyValue.Get.class, getValueMessage -> {
-                    long key = getValueMessage.key;
-                    Serializable val = this.storageService.get(key);
-                    System.out.println("Get for key " + key);
-                    getContext().getSender().tell(new KeyValue.GetReply(key, val), ActorRef.noSender());
+                    long key = getValueMessage.hashKey;
+                    Serializable val = this.storageService.get(getValueMessage.originalKey);
+                    getContext().getSender().tell(new KeyValue.GetReply(getValueMessage.originalKey, key, val), ActorRef.noSender());
                 })
                 .build();
     }
