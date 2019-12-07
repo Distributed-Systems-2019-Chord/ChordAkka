@@ -300,7 +300,7 @@ public class NodeActor extends AbstractActor {
         // Calculate a unique port based on the nodeId, if the port is already taken:
         if (isPortInUse(hostname, port)) {
             // TODO: Nicer heuristic to find a good suitable port
-            port = port + (int) this.nodeId;
+            port = port + 1;
         }
 
         InetSocketAddress tcp_socked = new InetSocketAddress(hostname, port);
