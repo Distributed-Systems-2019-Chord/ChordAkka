@@ -200,6 +200,7 @@ public class NodeActor extends AbstractActor {
                     this.storageActorRef.forward(putValueMessage, getContext());
                 })
                 .match(KeyValue.Get.class, getValueMessage -> this.storageActorRef.forward(getValueMessage, getContext()))
+                .matchEquals("killActor", m -> getContext().stop(getSelf()))
                 .build();
     }
 
