@@ -151,7 +151,7 @@ public class NodeActor extends AbstractActor {
                     System.out.println("Successor: " + this.fingerTableService.getSuccessor());
                     fingerTableService.printFingerTable(true);
 
-                    // TODO: extract into new method
+                    // TODO: Only call this when predecessor is known, but where?
                     // calculate key range by looking at predecessor value
                     List<Long> keyRange = LongStream.range(this.fingerTableService.getPredecessor().id + 1, this.nodeId)
                             .boxed()
