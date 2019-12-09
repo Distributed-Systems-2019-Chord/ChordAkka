@@ -6,17 +6,17 @@ import java.util.Map;
 
 public class StorageService {
 
-    private Map<Long, Serializable> valueStore;
+    private Map<String, Serializable> valueStore;
 
     public StorageService() {
         this.valueStore = new HashMap<>();
     }
 
-    public void put(long key, Serializable value) {
+    public void put(String key, Serializable value) {
         this.valueStore.put(key, value);
     }
 
-    public Serializable get(long key) {
+    public Serializable get(String key) {
         return this.valueStore.get(key);
     }
 

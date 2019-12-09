@@ -88,33 +88,33 @@ public class NodeActor extends AbstractActor {
         getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(FIX_FINGER_SCHEDULE_TIME), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
     }
 
-    private void getValueForKey(long key) {
-        if (shouldKeyBeOnThisNodeOtherwiseForward(key, new KeyValue.Get(key))) {
-            getValueFromStorageActor(key);
+    private void getValueForKey(long hashKey, String originalKey) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Get(originalKey, hashKey))) {
+            getValueFromStorageActor(hashKey, originalKey);
         }
     }
 
-    private void getValueFromStorageActor(long key) {
-        KeyValue.Get getRequest = new KeyValue.Get(key);
+    private void getValueFromStorageActor(long hashKey, String originalKey) {
+        KeyValue.Get getRequest = new KeyValue.Get(originalKey, hashKey);
         Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
         Future<Object> valueResponse = Patterns.ask(this.storageActorRef, getRequest, timeout);
         try {
             Serializable value = ((KeyValue.GetReply) Await.result(valueResponse, timeout.duration())).value;
-            getSender().tell(new KeyValue.GetReply(key, value), getSelf());
+            getSender().tell(new KeyValue.GetReply(originalKey, hashKey, value), getSelf());
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void putValueForKey(long key, Serializable value) {
-        if (shouldKeyBeOnThisNodeOtherwiseForward(key, new KeyValue.Put(key, value))) {
-            putValueInStore(key, value);
-            getSender().tell(new KeyValue.PutReply(key, value), getSelf());
+    private void putValueForKey(long hashKey, String originalKey, Serializable value) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Put(originalKey, hashKey, value))) {
+            putValueInStore(hashKey, originalKey, value);
+            getSender().tell(new KeyValue.PutReply(originalKey, hashKey, value), getSelf());
         }
     }
 
-    private void putValueInStore(long key, Serializable value) {
-        storageActorRef.tell(new KeyValue.Put(key, value), getSelf());
+    private void putValueInStore(long hashKey, String originalKey, Serializable value) {
+        storageActorRef.tell(new KeyValue.Put(originalKey, hashKey, value), getSelf());
     }
 
     private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
@@ -167,7 +167,7 @@ public class NodeActor extends AbstractActor {
                     }
                     // Notify Successor that this node might be it's new predecessor
                     this.fingerTableService.getSuccessor().chordRef.tell(new Notify.Request(new ChordNode(this.nodeId, getSelf())), getSelf());
-                    System.out.println(fingerTableService.toString());
+                    // System.out.println(fingerTableService.toString());
                 })
                 // .predecessor RPC
                 .match(Predecessor.Request.class, msg -> getSender().tell(new Predecessor.Reply(fingerTableService.getPredecessor()), getSelf()))
@@ -182,7 +182,7 @@ public class NodeActor extends AbstractActor {
                         // Skip output if nothing changes
                         return;
                     }
-                    System.out.println(fingerTableService.toString());
+                    // System.out.println(fingerTableService.toString());
                 })
                 .match(FindSuccessor.Request.class, msg -> {
                     // +1 to do inclusive interval
@@ -229,17 +229,18 @@ public class NodeActor extends AbstractActor {
                     }
                 })
                 .match(Connected.class, conn -> {
-                    System.out.println("MemCache Client connected");
                     manager.tell(conn, getSelf());
                     ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, storageActorRef));
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {
-                    long key = putValueMessage.key;
+
+                    long hashKey = putValueMessage.hashKey;
+                    String originalKey = putValueMessage.originalKey;
                     Serializable value = putValueMessage.value;
-                    putValueForKey(key, value);
+                    putValueForKey(hashKey, originalKey, value);
                 })
-                .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.key))
+                .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey, getValueMessage.originalKey))
                 .build();
     }
 
