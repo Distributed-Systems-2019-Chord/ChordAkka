@@ -35,6 +35,7 @@ class StorageActor extends AbstractActor {
                 })
                 .match(KeyValue.Get.class, getValueMessage -> {
                     long key = getValueMessage.hashKey;
+                    System.out.println("GET key " + key);
                     Serializable val = this.storageService.get(getValueMessage.originalKey);
                     getContext().getSender().tell(new KeyValue.GetReply(getValueMessage.originalKey, key, val), ActorRef.noSender());
                 })
