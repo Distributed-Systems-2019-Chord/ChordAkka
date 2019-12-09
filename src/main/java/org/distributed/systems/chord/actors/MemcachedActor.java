@@ -133,7 +133,6 @@ class MemcachedActor extends AbstractActor {
                 new OnComplete<Iterable<Boolean>>() {
                     public void onComplete(Throwable failure, Iterable<Boolean> queryResults) {
                         // Hook for finished query
-                        System.out.println("Finished Mem");
                     }
                 }, getContext().system().dispatcher());
 
