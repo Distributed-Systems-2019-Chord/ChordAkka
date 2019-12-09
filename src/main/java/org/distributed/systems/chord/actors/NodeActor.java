@@ -107,14 +107,22 @@ public class NodeActor extends AbstractActor {
     }
 
     private void putValueForKey(long hashKey, String originalKey, Serializable value) {
-        if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Put(originalKey, hashKey, value))) {
-            putValueInStore(hashKey, originalKey, value);
-            getSender().tell(new KeyValue.PutReply(originalKey, hashKey, value), getSelf());
+        putValueForKey(new KeyValue.Put(originalKey, hashKey, value));
+    }
+
+    private void putValueForKey(KeyValue.Put msg) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
+            putValueInStore(msg);
+            getSender().tell(new KeyValue.PutReply(msg.originalKey, msg.hashKey, msg.value), getSelf());
         }
     }
 
+    private void putValueInStore(KeyValue.Put msg) {
+        storageActorRef.tell(msg, getSelf());
+    }
+
     private void putValueInStore(long hashKey, String originalKey, Serializable value) {
-        storageActorRef.tell(new KeyValue.Put(originalKey, hashKey, value), getSelf());
+        putValueInStore(new KeyValue.Put(originalKey, hashKey, value));
     }
 
     private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
@@ -237,11 +245,8 @@ public class NodeActor extends AbstractActor {
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {
-
-                    long hashKey = putValueMessage.hashKey;
-                    String originalKey = putValueMessage.originalKey;
-                    Serializable value = putValueMessage.value;
-                    putValueForKey(hashKey, originalKey, value);
+                    // We need to pass the original message, to ensure that memcache actor gets a reply
+                    putValueForKey(putValueMessage);
                 })
                 .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey, getValueMessage.originalKey))
                 .build();

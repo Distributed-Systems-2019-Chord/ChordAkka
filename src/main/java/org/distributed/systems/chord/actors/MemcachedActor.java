@@ -104,22 +104,20 @@ class MemcachedActor extends AbstractActor {
                     long hashKey = this.hashUtil.hash(key);
                     KeyValue.Put putValueMessage = new KeyValue.Put(key, hashKey, textCommand);
 
-                    Future<Boolean> f = future(new Callable<Boolean>() {
-                        public Boolean call() {
-                            // Await this future, and then return another future
-                            // This is done, to answer queries as soon as possible!
-                            Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-                            Future<Object> queryFuture = Patterns.ask(node, putValueMessage, timeout);
-                            try {
-                                KeyValue.PutReply rply = (KeyValue.PutReply) Await.result(queryFuture, timeout.duration());
-                                ByteString resp = ByteString.fromString("STORED\r\n");
-                                client.tell(TcpMessage.write(resp), getSelf());
-                                return Boolean.TRUE;
-                            } catch (Exception e) {
-                                // Write Some Error Notice to Memcache
-                                System.out.println(e);
-                                return Boolean.FALSE;
-                            }
+                    Future<Boolean> f = future(() -> {
+                        // Await this future, and then return another future
+                        // This is done, to answer queries as soon as possible!
+                        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+                        Future<Object> queryFuture = Patterns.ask(node, putValueMessage, timeout);
+                        try {
+                            KeyValue.PutReply rply = (KeyValue.PutReply) Await.result(queryFuture, timeout.duration());
+                            ByteString resp = ByteString.fromString("STORED\r\n");
+                            client.tell(TcpMessage.write(resp), getSelf());
+                            return Boolean.TRUE;
+                        } catch (Exception e) {
+                            // Write Some Error Notice to Memcache
+                            System.out.println("MemCache Error: " + e.toString());
+                            return Boolean.FALSE;
                         }
                     }, getContext().getSystem().getDispatcher());
                     queries.add(f);
