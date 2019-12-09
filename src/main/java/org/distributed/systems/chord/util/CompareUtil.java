@@ -10,7 +10,7 @@ public class CompareUtil {
         return left < value && value < right;
     }
 
-    public static boolean isBetweenExeclusive(long left, long right, long value) {
+    public static boolean isBetweenExclusive(long left, long right, long value) {
         return checkOverZero(left, right, value) || checkInBetweenNotOverZero(left, right, value);
     }
 }

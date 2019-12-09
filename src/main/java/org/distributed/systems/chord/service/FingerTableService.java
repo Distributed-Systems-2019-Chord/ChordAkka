@@ -57,6 +57,12 @@ public class FingerTableService {
         return predecessor;
     }
 
+    public void printFingerTable(boolean override) {
+        if (ChordStart.ENABLE_LOGGING || override) {
+            System.out.println(toString());
+        }
+    }
+
     @Override
     public String toString() {
         String fingers =
@@ -67,7 +73,7 @@ public class FingerTableService {
                             if (succFinger == null) {
                                 return "empty\n";
                             } else {
-                                return fingerTable[fingerIndex].getStart() + "\t|\t" + fingerTable[fingerIndex].getInterval().toString() + "\t|\t" + succFinger.toString() + "\n";
+                                return fingerTable[fingerIndex].getStart() + "\t|\t" + fingerTable[fingerIndex].getInterval().toString() + "\t\t|\t" + succFinger.toString() + "\n";
                             }
                         }).collect(Collectors.joining());
 
