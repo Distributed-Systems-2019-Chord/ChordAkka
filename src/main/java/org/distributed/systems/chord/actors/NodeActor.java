@@ -166,7 +166,6 @@ public class NodeActor extends AbstractActor {
 
                     fingerTableService.setFingerEntryForIndex(msg.fingerTableIndex, msg.chordNode);
                     System.out.println(fingerTableService.toString());
-
                 })
                 .match(Tcp.Bound.class, msg -> {
                     // This will be called, when the SystemActor bound MemCache interface for the particular node.
@@ -200,6 +199,19 @@ public class NodeActor extends AbstractActor {
                     this.storageActorRef.forward(putValueMessage, getContext());
                 })
                 .match(KeyValue.Get.class, getValueMessage -> this.storageActorRef.forward(getValueMessage, getContext()))
+                .match(KeyValue.GetAll.class, getAllMessage -> this.storageActorRef.forward(getAllMessage,getContext()))
+                .match(LeaveMessage.ForSuccessor.class, leaveMessage ->{
+                    log.info("got leave message successor");
+                    log.info("new predecessor is: " + leaveMessage.getPredecessor().id);
+                    leaveMessage.getKeyValues().forEach((key, value) -> log.info("got key value " +key + ":" + value));
+                    this.fingerTableService.setPredecessor(leaveMessage.getPredecessor());
+                    leaveMessage.getKeyValues().forEach((key, value) -> storageActorRef.tell(new KeyValue.Put(key,value),getSelf()));
+                })
+                .match(LeaveMessage.ForPredecessor.class, leaveMessage ->{
+                    log.info("got leave message predecessor");
+                    log.info("new successor is: " +leaveMessage.getSuccessor().id);
+                    this.fingerTableService.setSuccessor(leaveMessage.getSuccessor());
+                })
                 .build();
     }
 
@@ -213,6 +225,25 @@ public class NodeActor extends AbstractActor {
         return getSelf();
     }
 
+    private void leave(){
+        Future<Object> getAllFuture = Patterns.ask(getSelf(), new KeyValue.GetAll(), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+        getAllFuture.onComplete(
+                new OnComplete<Object>() {
+                    public void onComplete(Throwable failure, Object result) {
+                        if (failure != null) {
+                            // We got a failure, handle it here
+                            System.out.println("Something went wrong with getting all key values");
+                            failure.printStackTrace();
+                        } else {
+                            System.out.println("Retrieved values");
+                            KeyValue.GetAllReply reply = (KeyValue.GetAllReply) result;
+                            reply.keys.forEach((key, value) -> System.out.println(key + ":" + value));
+                            fingerTableService.getPredecessor().chordRef.tell(new LeaveMessage.ForPredecessor(fingerTableService.getSuccessor()),getSelf());
+                            fingerTableService.getSuccessor().chordRef.tell(new LeaveMessage.ForSuccessor(fingerTableService.getPredecessor(),reply.keys),getSelf());
+                        }
+                    }
+                }, getContext().system().dispatcher());
+    }
     private void fix_fingers() {
         fix_fingers_next++;
 

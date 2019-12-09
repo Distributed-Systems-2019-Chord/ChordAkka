@@ -8,6 +8,7 @@ import org.distributed.systems.chord.messaging.KeyValue;
 import org.distributed.systems.chord.service.StorageService;
 
 import java.io.Serializable;
+import java.util.Map;
 
 class StorageActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
@@ -35,6 +36,10 @@ class StorageActor extends AbstractActor {
                 .match(KeyValue.Get.class, getValueMessage -> {
                     Serializable val = this.storageService.get(getValueMessage.key);
                     getContext().getSender().tell(new KeyValue.GetReply(val), ActorRef.noSender());
+                })
+                .match(KeyValue.GetAll.class, getAllMessage->{
+                    Map<String,Serializable> keyValues = this.storageService.getAll();
+                    getContext().getSender().tell(new KeyValue.GetAllReply(keyValues), ActorRef.noSender());
                 })
                 .build();
     }

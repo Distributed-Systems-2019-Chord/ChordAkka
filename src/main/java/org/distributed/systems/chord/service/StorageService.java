@@ -20,4 +20,8 @@ public class StorageService {
         return this.valueStore.get(key);
     }
 
+    public Map<String, Serializable> getAll(){
+        return this.valueStore;
+    }
+
 }
