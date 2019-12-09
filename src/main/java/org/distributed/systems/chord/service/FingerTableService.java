@@ -57,6 +57,12 @@ public class FingerTableService {
         return predecessor;
     }
 
+    public void printFingerTable(boolean override) {
+        if (ChordStart.ENABLE_LOGGING || override) {
+            System.out.println(toString());
+        }
+    }
+
     @Override
     public String toString() {
         String fingers =

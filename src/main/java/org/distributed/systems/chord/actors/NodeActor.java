@@ -121,6 +121,9 @@ public class NodeActor extends AbstractActor {
         // Between my predecessor and my node id
         if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, nodeId + 1, key)) {
             return true;
+        } else if (CompareUtil.isBetweenExclusive(nodeId, fingerTableService.getSuccessor().id + 1, key)) {
+            fingerTableService.getSuccessor().chordRef.forward(commandMessage, getContext());
+            return false;
         } else {
             closest_preceding_node(key).forward(commandMessage, getContext());
             return false;
@@ -142,7 +145,7 @@ public class NodeActor extends AbstractActor {
                     fingerTableService.setSuccessor(new ChordNode(rply.id, rply.succesor));
                     System.out.println("NodeActor " + this.nodeId + "joined! ");
                     System.out.println("Successor: " + this.fingerTableService.getSuccessor());
-                    System.out.println(fingerTableService.toString());
+                    fingerTableService.printFingerTable(true);
                 })
                 .match(Stabilize.Request.class, msg -> {
 
@@ -206,7 +209,7 @@ public class NodeActor extends AbstractActor {
                     }
 
                     fingerTableService.setFingerEntryForIndex(msg.fingerTableIndex, msg.chordNode);
-                    System.out.println(fingerTableService.toString());
+                    fingerTableService.printFingerTable(false);
 
                 })
                 .match(Tcp.Bound.class, msg -> {
@@ -230,7 +233,7 @@ public class NodeActor extends AbstractActor {
                 })
                 .match(Connected.class, conn -> {
                     manager.tell(conn, getSelf());
-                    ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, storageActorRef));
+                    ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, self()));
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {

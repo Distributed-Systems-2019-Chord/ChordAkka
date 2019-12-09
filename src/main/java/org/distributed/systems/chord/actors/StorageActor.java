@@ -24,6 +24,7 @@ class StorageActor extends AbstractActor {
                 .match(KeyValue.Put.class, putValueMessage -> {
                     long hashKey = putValueMessage.hashKey;
                     Serializable value = putValueMessage.value;
+                    System.out.println("Put key " + hashKey);
                     this.storageService.put(putValueMessage.originalKey, value);
 
                     ActorRef optionalSender = getContext().getSender();
