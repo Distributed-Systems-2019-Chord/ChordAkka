@@ -13,28 +13,8 @@ services:
       - NODE_ID=24
     ports:
       - 11211:11211
-  regular01:
-    image: chord:v1
-    environment:
-      - CHORD_NODE_TYPE=regular
-      - CHORD_CENTRAL_NODE=centralnode
-      - CHORD_CENTRAL_NODE_PORT=25520
-      - NODE_ID=34
-    depends_on:
-      - centralnode
-  regular02:
-    image: chord:v1
-    environment:
-      - CHORD_NODE_TYPE=regular
-      - CHORD_CENTRAL_NODE=centralnode
-      - CHORD_CENTRAL_NODE_PORT=25520
-      - NODE_ID=36
-  regular03:
-    image: chord:v1
-    environment:
-      - CHORD_NODE_TYPE=regular
-      - CHORD_CENTRAL_NODE=centralnode
-      - CHORD_CENTRAL_NODE_PORT=25520
-      - NODE_ID=99
-    depends_on:
-      - centralnode
+    networks:
+      - chord_network
+networks:
+  chord_network:
+    name: chord_network

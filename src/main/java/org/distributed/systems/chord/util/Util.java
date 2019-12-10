@@ -36,7 +36,7 @@ public class Util {
     public static long getNodeId() {
         long envVal;
         HashUtil hashUtil = new HashUtil();
-        if (System.getenv("NODE_ID") == null) {
+        if (System.getenv("NODE_ID") == null || (System.getenv("NODE_ID") != null && System.getenv("NODE_ID").equals(""))) {
             envVal = hashUtil.hash(UUID.randomUUID().toString());
         } else {
             envVal = Long.parseLong(System.getenv("NODE_ID"));
