@@ -78,7 +78,7 @@ class StorageActor extends AbstractActor {
                     getContext().getSender().tell(new KeyValue.DeleteReply(), ActorRef.noSender());
                 })
                 .match(KeyValue.GetAll.class, getAllMessage->{
-                    Map<String,Serializable> keyValues = this.storageService.getAll();
+                    Map<Long, Pair<String, Serializable>> keyValues = this.storageService.getAll();
                     getContext().getSender().tell(new KeyValue.GetAllReply(keyValues), ActorRef.noSender());
                 })
                 .build();
