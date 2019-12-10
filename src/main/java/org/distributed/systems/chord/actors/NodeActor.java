@@ -57,7 +57,7 @@ public class NodeActor extends AbstractActor {
     public void preStart() throws Exception {
         super.preStart();
         log.info("Starting up...     ref: " + getSelf());
-        this.nodeId = Util.getNodeId(config);
+        this.nodeId = Util.getNodeId();
 
         // Init the FingerTable
         fingerTableService = new FingerTableService(this.nodeId);
