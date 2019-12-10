@@ -25,19 +25,20 @@ public class StorageService {
         return this.valueStore.get(key);
     }
 
-    public void putAll(Map<Long, Pair<String, Serializable>> valueStore){
+    public void putAll(Map<Long, Pair<String, Serializable>> valueStore) {
         this.valueStore.putAll(valueStore);
     }
-    public  Map<Long, Pair<String, Serializable>> getSubset(List<Long> keys){
+
+    public Map<Long, Pair<String, Serializable>> getSubset(List<Long> keys) {
         return keys.stream()
                 .filter(this.valueStore::containsKey)
                 .collect(Collectors.toMap(Function.identity(), this.valueStore::get));
     }
 
-    public void deleteSubset(List<Long> keys){
+    public void deleteSubset(List<Long> keys) {
         keys.stream()
                 .filter(this.valueStore::containsKey)
-                .collect(Collectors.toMap(Function.identity(), this.valueStore::remove));
+                .map(this.valueStore::remove);
     }
 
     public void delete(Long key) {
