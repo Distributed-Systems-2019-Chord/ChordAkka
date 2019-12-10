@@ -1,6 +1,7 @@
 package org.distributed.systems.chord.messaging;
 
 import org.distributed.systems.chord.models.ChordNode;
+import org.distributed.systems.chord.models.Pair;
 
 import java.io.Serializable;
 import java.util.Map;
@@ -18,16 +19,16 @@ public class LeaveMessage {
     public static class ForSuccessor implements Command {
 
         private ChordNode predecessor;
-        private Map<String, Serializable> keyValues;
+        private Map<Long, Pair<String, Serializable>> keyValues;
 
-        public ForSuccessor(ChordNode predecessor, Map<String, Serializable> keyValues){
+        public ForSuccessor(ChordNode predecessor, Map<Long, Pair<String, Serializable>> keyValues){
             this.predecessor = predecessor;
             this.keyValues = keyValues;
         }
         public ChordNode getPredecessor(){
             return this.predecessor;
         }
-        public Map<String, Serializable> getKeyValues() {
+        public Map<Long, Pair<String, Serializable>> getKeyValues() {
             return keyValues;
         }
     }
