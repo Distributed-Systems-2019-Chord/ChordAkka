@@ -59,6 +59,8 @@ class StorageActor extends AbstractActor {
                     Future<Object> getSubsetFuture = Patterns.ask(storageActorGetReply.storageActor, new KeyValue.GetSubset(keyTransferMessage.keys), timeoutTransfer);
                     KeyValue.GetSubsetReply getSubsetReply = (KeyValue.GetSubsetReply) Await.result(getSubsetFuture, timeoutTransfer.duration());
                     this.storageService.putAll(getSubsetReply.keyValues);
+
+                    // todo call delete for keys (that contained a value)
                 })
                 .match(KeyValue.GetSubset.class, getSubsetMessage ->{
                     // Get subset from Key value store based on list of keys

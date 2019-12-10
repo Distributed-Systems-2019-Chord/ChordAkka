@@ -74,7 +74,7 @@ class MemcachedActor extends AbstractActor {
 
                         if (rply.value != null) {
                             int payload_length = rply.value.toString().length();
-                            ByteString getdataresp = ByteString.fromString(rply.value.toString() + "\r\n");
+                            ByteString getdataresp = ByteString.fromString(rply.value.getOriginalKey().toString() + "\r\n");
                             ByteString getresp = ByteString.fromString("VALUE " + key + " 0 " + (payload_length) + " \r\n");
                             client.tell(TcpMessage.write(getresp), getSelf());
                             client.tell(TcpMessage.write(getdataresp), getSelf());
