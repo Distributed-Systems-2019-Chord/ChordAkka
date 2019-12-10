@@ -61,10 +61,16 @@ class StorageActor extends AbstractActor {
                     this.storageService.putAll(getSubsetReply.keyValues);
 
                     // todo call delete for keys (that contained a value)
+                    storageActorGetReply.storageActor.tell(new KeyValue.DeleteSubset(keyTransferMessage.keys), getSelf());
+
                 })
                 .match(KeyValue.GetSubset.class, getSubsetMessage ->{
                     // Get subset from Key value store based on list of keys
                     getSender().tell(new KeyValue.GetSubsetReply(this.storageService.getSubset(getSubsetMessage.keys)), getSelf());
+                })
+                .match(KeyValue.DeleteSubset.class, deleteSubsetMessage ->{
+                    // Delete subset from Key value store
+                    this.storageService.deleteSubset(deleteSubsetMessage.keys);
                 })
                 .match(KeyValue.Delete.class, deleteMessage -> {
                     this.storageService.delete(deleteMessage.hashKey);

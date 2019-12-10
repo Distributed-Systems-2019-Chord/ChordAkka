@@ -63,6 +63,22 @@ public class KeyValue {
             this.keyValues = keyValues;
         }
     }
+
+    public static class DeleteSubset implements Response{
+        public final List<Long> keys;
+
+        public DeleteSubset(List<Long> keys) {
+            this.keys = keys;
+        }
+    }
+
+    public static class DeleteSubsetReply implements Response{
+
+        public DeleteSubsetReply() {
+
+        }
+    }
+
     //TODO: delete original key
     public static class Delete implements  Command {
         public final String originalKey;

@@ -34,6 +34,12 @@ public class StorageService {
                 .collect(Collectors.toMap(Function.identity(), this.valueStore::get));
     }
 
+    public void deleteSubset(List<Long> keys){
+        keys.stream()
+                .filter(this.valueStore::containsKey)
+                .collect(Collectors.toMap(Function.identity(), this.valueStore::remove));
+    }
+
     public void delete(Long key) {
         this.valueStore.remove(key);
     }

@@ -220,7 +220,6 @@ public class NodeActor extends AbstractActor {
                     // TODO: Remove Dublicate Ifs (to conform to pseudocode)
                     if (fingerTableService.getPredecessor().chordRef == null) {
                         fingerTableService.setPredecessor(msg.nPrime);
-                        System.out.println("Transferring keys...");
                         transferKeysOnJoin();
                     } else if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, this.nodeId, msg.nPrime.id)) {
                         fingerTableService.setPredecessor(msg.nPrime);
@@ -385,6 +384,7 @@ public class NodeActor extends AbstractActor {
         // tell my storageActor to ask my successor for transfer keys.
         ActorRef successor = fingerTableService.getSuccessor().chordRef;
         if(getSelf() != successor){
+            System.out.println("Transferring keys...");
             this.storageActorRef.tell(new KeyTransfer.Request(successor, keyRange), getSelf());
         }
     }
