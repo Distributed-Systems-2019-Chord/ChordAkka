@@ -20,4 +20,7 @@ public class StorageService {
         return this.valueStore.get(key);
     }
 
+    public void delete(String originalKey) {
+        this.valueStore.remove(originalKey);
+    }
 }

@@ -39,6 +39,10 @@ class StorageActor extends AbstractActor {
                     Serializable val = this.storageService.get(getValueMessage.originalKey);
                     getContext().getSender().tell(new KeyValue.GetReply(getValueMessage.originalKey, key, val), ActorRef.noSender());
                 })
+                .match(KeyValue.Delete.class, deleteMessage -> {
+                    this.storageService.delete(deleteMessage.originalKey);
+                    getContext().getSender().tell(new KeyValue.DeleteReply(), ActorRef.noSender());
+                })
                 .build();
     }
 }

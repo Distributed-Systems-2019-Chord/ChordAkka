@@ -51,4 +51,20 @@ public class KeyValue {
             this.value = value;
         }
     }
+
+    public static class Delete implements  Command {
+        public final String originalKey;
+        public final long hashKey;
+
+        public Delete(String originalKey, long hashKey) {
+            this.originalKey = originalKey;
+            this.hashKey = hashKey;
+        }
+    }
+
+    public static class DeleteReply implements Response {
+
+        public  DeleteReply() { }
+
+    }
 }
