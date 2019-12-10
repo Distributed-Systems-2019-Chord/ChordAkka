@@ -63,4 +63,20 @@ public class KeyValue {
             this.keyValues = keyValues;
         }
     }
+    //TODO: delete original key
+    public static class Delete implements  Command {
+        public final String originalKey;
+        public final long hashKey;
+
+        public Delete(String originalKey, long hashKey) {
+            this.originalKey = originalKey;
+            this.hashKey = hashKey;
+        }
+    }
+
+    public static class DeleteReply implements Response {
+
+        public  DeleteReply() { }
+
+    }
 }

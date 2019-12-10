@@ -35,4 +35,7 @@ public class StorageService {
                 .collect(Collectors.toMap(Function.identity(), this.valueStore::get));
     }
 
+    public void delete(String originalKey) {
+        this.valueStore.remove(originalKey);
+    }
 }

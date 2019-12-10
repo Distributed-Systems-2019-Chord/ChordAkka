@@ -110,18 +110,48 @@ public class NodeActor extends AbstractActor {
         }
     }
 
+    //FIXME: Merge Conflict
     private void putValueForKey(long hashKey, Pair<String, Serializable> value) {
         if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Put(hashKey, value))) {
             putValueInStore(hashKey, value);
             getSender().tell(new KeyValue.PutReply(hashKey, value), getSelf());
+    private void putValueForKey(long hashKey, String originalKey, Serializable value) {
+        putValueForKey(new KeyValue.Put(originalKey, hashKey, value));
+    }
+
+    private void putValueForKey(KeyValue.Put msg) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
+            putValueInStore(msg);
+            getSender().tell(new KeyValue.PutReply(msg.originalKey, msg.hashKey, msg.value), getSelf());
         }
     }
 
+    private void deleteKey(KeyValue.Delete msg) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
+            // TODO: What if not found, memcached actually likes "not found" things
+            deleteKeyInStore(msg);
+            getSender().tell(new KeyValue.DeleteReply(), getSelf());
+        }
+    }
+
+    private void deleteKeyInStore(KeyValue.Delete msg) { storageActorRef.tell(msg, getSelf()); }
+
+    private void putValueInStore(KeyValue.Put msg) {
+        storageActorRef.tell(msg, getSelf());
+    }
+
+    //FIXME: Merge Conflict
     private void putValueInStore(long hashKey, Pair<String, Serializable> value) {
         storageActorRef.tell(new KeyValue.Put(hashKey, value), getSelf());
+    private void putValueInStore(long hashKey, String originalKey, Serializable value) {
+        putValueInStore(new KeyValue.Put(originalKey, hashKey, value));
     }
 
     private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
+        if (nodeId == fingerTableService.getSuccessor().id) { // I'm the only node in the network
+            return true;
+        }
+
         // Between my predecessor and my node id
         if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, nodeId + 1, key)) {
             return true;
@@ -251,6 +281,12 @@ public class NodeActor extends AbstractActor {
                     long hashKey = putValueMessage.hashKey;
                     Pair<String, Serializable> value = putValueMessage.value;
                     putValueForKey(hashKey, value);
+                    //FIXME: Merge Conflict
+                    // We need to pass the original message, to ensure that memcache actor gets a reply
+                    putValueForKey(putValueMessage);
+                })
+                .match(KeyValue.Delete.class, deleteMessage -> {
+                    deleteKey(deleteMessage);
                 })
                 .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey))
                 .build();
