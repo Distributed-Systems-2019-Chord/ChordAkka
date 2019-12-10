@@ -117,6 +117,16 @@ public class NodeActor extends AbstractActor {
         }
     }
 
+    private void deleteKey(KeyValue.Delete msg) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
+            // TODO: What if not found, memcached actually likes "not found" things
+            deleteKeyInStore(msg);
+            getSender().tell(new KeyValue.DeleteReply(), getSelf());
+        }
+    }
+
+    private void deleteKeyInStore(KeyValue.Delete msg) { storageActorRef.tell(msg, getSelf()); }
+
     private void putValueInStore(KeyValue.Put msg) {
         storageActorRef.tell(msg, getSelf());
     }
@@ -251,6 +261,9 @@ public class NodeActor extends AbstractActor {
                 .match(KeyValue.Put.class, putValueMessage -> {
                     // We need to pass the original message, to ensure that memcache actor gets a reply
                     putValueForKey(putValueMessage);
+                })
+                .match(KeyValue.Delete.class, deleteMessage -> {
+                    deleteKey(deleteMessage);
                 })
                 .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey, getValueMessage.originalKey))
                 .build();
