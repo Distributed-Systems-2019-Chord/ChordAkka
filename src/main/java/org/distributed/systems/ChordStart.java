@@ -10,10 +10,10 @@ public class ChordStart {
     // FIXME 160 according to sha-1 but this is the max_length of a java long..
     public static int M = 12; // Number of bits in key nodeId's
     public static long AMOUNT_OF_KEYS = Math.round(Math.pow(2, M)) - 1;
-
+    public static ActorSystem system = null;
     public static void main(String[] args) {
         // Create actor system
-        ActorSystem system = ActorSystem.create("ChordNetwork"); // Setup actor system
+        system = ActorSystem.create("ChordNetwork"); // Setup actor system
 
         M = system.settings().config().getInt("myapp.mBits"); // Override mBits based on config
         AMOUNT_OF_KEYS = Math.round(Math.pow(2, M)) - 1;
