@@ -8,7 +8,12 @@ For now it's based on the following example: https://developer.lightbend.com/gui
 - Java 11 or higher (openjdk)
 
 ## How to run
-run: `mvn compile exec:exec`
+`mvn clean packge -DskipTests`
+`cd target`
+`java -Dconfig.resource=/centralNode.conf -jar chord-1.0-allinone.jar`
+
+Or use docker:
+`docker-compose up`
 
 To run central node use parameter: `-Dconfig.resource=/centralNode.conf`
 
