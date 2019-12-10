@@ -13,13 +13,13 @@ import akka.util.ByteString;
 import akka.util.Timeout;
 import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.messaging.KeyValue;
+import org.distributed.systems.chord.models.Pair;
 import org.distributed.systems.chord.util.impl.HashUtil;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.concurrent.Callable;
 
 import static akka.dispatch.Futures.future;
 
@@ -62,7 +62,7 @@ class MemcachedActor extends AbstractActor {
                 String[] get_options = textCommand.split(" ");
                 String key = get_options[1].trim();
                 long hashKey = this.hashUtil.hash(key);
-                KeyValue.Get keyValueGetMessage = new KeyValue.Get(key, hashKey);
+                KeyValue.Get keyValueGetMessage = new KeyValue.Get(hashKey);
 
                 Future<Boolean> f = future(() -> {
                     // Await this future, and then return another future
@@ -74,8 +74,8 @@ class MemcachedActor extends AbstractActor {
 
                         if (rply.value != null) {
                             int payload_length = rply.value.toString().length();
-                            ByteString getdataresp = ByteString.fromString(rply.value.toString() + "\r\n");
-                            ByteString getresp = ByteString.fromString("VALUE " + rply.originalKey + " 0 " + (payload_length) + " \r\n");
+                            ByteString getdataresp = ByteString.fromString(rply.value.getValue().toString() + "\r\n");
+                            ByteString getresp = ByteString.fromString("VALUE " + key + " 0 " + (payload_length) + " \r\n");
                             client.tell(TcpMessage.write(getresp), getSelf());
                             client.tell(TcpMessage.write(getdataresp), getSelf());
 
@@ -127,7 +127,7 @@ class MemcachedActor extends AbstractActor {
                     String[] set_options = previousTextCommand.split(" ");
                     String key = set_options[1].trim();
                     long hashKey = this.hashUtil.hash(key);
-                    KeyValue.Put putValueMessage = new KeyValue.Put(key, hashKey, textCommand);
+                    KeyValue.Put putValueMessage = new KeyValue.Put(hashKey, new Pair(key, textCommand));
 
                     Future<Boolean> f = future(() -> {
                         // Await this future, and then return another future
