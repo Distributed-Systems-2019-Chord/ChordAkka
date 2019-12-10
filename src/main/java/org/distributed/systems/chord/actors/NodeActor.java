@@ -38,7 +38,7 @@ public class NodeActor extends AbstractActor {
     private static final int MEMCACHE_MIN_PORT = 11211;
     private static final int MEMCACHE_MAX_PORT = 12235;
     private static final int STABILIZE_SCHEDULE_TIME = 5000;
-    private static final int CHECK_PREDECESSOR_SCHEDULE_TIME = 20000;
+    private static final int CHECK_PREDECESSOR_SCHEDULE_TIME = 5000;
     private static final int FIX_FINGER_SCHEDULE_TIME = 1000;
     private final ActorRef manager;
 
@@ -102,13 +102,16 @@ public class NodeActor extends AbstractActor {
                     System.out.println("NodeActor " + this.nodeId + " wants to join");
 
                     Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-                    Future<Object> centralNodeFuture = Patterns.ask(msg.requestor, new FindSuccessor.Request(this.nodeId, 0), timeout);
-                    FindSuccessor.Reply rply = (FindSuccessor.Reply) Await.result(centralNodeFuture, timeout.duration());
-
-                    fingerTableService.setSuccessor(new ChordNode(rply.id, rply.succesor));
-                    System.out.println("NodeActor " + this.nodeId + "joined! ");
-                    System.out.println("Successor: " + this.fingerTableService.getSuccessor());
-                    System.out.println(fingerTableService.toString());
+                    try{
+                        Future<Object> centralNodeFuture = Patterns.ask(msg.requestor, new FindSuccessor.Request(this.nodeId, 0), timeout);
+                        FindSuccessor.Reply rply = (FindSuccessor.Reply) Await.result(centralNodeFuture, timeout.duration());
+                        fingerTableService.setSuccessor(new ChordNode(rply.id, rply.succesor));
+                        System.out.println("NodeActor " + this.nodeId + "joined! ");
+                        System.out.println("Successor: " + this.fingerTableService.getSuccessor());
+                        System.out.println(fingerTableService.toString());
+                    }catch(Exception e){
+                        System.out.println("Something went wrong | Join");
+                    }
                 })
                 .match(Stabilize.Request.class, msg -> {
 
@@ -116,10 +119,14 @@ public class NodeActor extends AbstractActor {
                     ChordNode x = fingerTableService.getPredecessor();
                     if (getSelf() != fingerTableService.getSuccessor().chordRef) {
                         Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-                        Future<Object> fsFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new Predecessor.Request(), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
-                        Predecessor.Reply rply = (Predecessor.Reply) Await.result(fsFuture, timeout.duration());
-
-                        x = rply.predecessor;
+                        try{
+                            Future<Object> fsFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new Predecessor.Request(), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+                            Predecessor.Reply rply = (Predecessor.Reply) Await.result(fsFuture, timeout.duration());
+                            x = rply.predecessor;
+                        } catch(Exception e){
+                            x = new ChordNode(fingerTableService.NOT_SET, null);
+                            System.out.println("Something went wrong | Stabilize");
+                        }
                     }
 
                     // TODO: Refactor several ifs, which check x in (n , successor) including the "over-zero" case
@@ -179,12 +186,12 @@ public class NodeActor extends AbstractActor {
                     //TODO: implement checkPredecessor method
                     try{
                         check_predecessor();
-                    } catch(TimeoutException e){
-                        this.fingerTableService.setPredecessor(null);
+                    } catch(Exception e){
+                        fingerTableService.setPredecessor(new ChordNode(fingerTableService.NOT_SET, null));
                     }
 
                 })
-                .match(Ping.class, msg ->{
+                .match(Ping.Request.class, msg ->{
                     getContext().getSender().tell(new Ping.Reply(), getSelf());
                 })
                 .match(Tcp.Bound.class, msg -> {
@@ -247,12 +254,10 @@ public class NodeActor extends AbstractActor {
                     public void onComplete(Throwable failure, Object result) {
                         if (failure != null) {
                             // We got a failure, handle it here
-                            System.out.println("Actor is not reachable");
-                            fingerTableService.setPredecessor(null);
-
+//                            System.out.println("Actor is not reachable");
+                            failure.printStackTrace();
                         }else {
                             Ping.Reply reply = (Ping.Reply) result;
-                            System.out.println("Actor is reachable");
                         }
                     }
                 }, getContext().system().dispatcher());
