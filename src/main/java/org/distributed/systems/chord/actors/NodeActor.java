@@ -151,18 +151,6 @@ public class NodeActor extends AbstractActor {
                     System.out.println("Successor: " + this.fingerTableService.getSuccessor());
                     fingerTableService.printFingerTable(true);
 
-                    // TODO: Only call this when predecessor is known, but where?
-                    // calculate key range by looking at predecessor value
-                    List<Long> keyRange = LongStream.range(this.fingerTableService.getPredecessor().id + 1, this.nodeId)
-                            .boxed()
-                            .collect(Collectors.toList());
-
-                    // tell my storageActor to ask my successor for transfer keys.
-                    ActorRef successor = fingerTableService.getSuccessor().chordRef;
-                    if(getSelf() != successor){
-                        this.storageActorRef.tell(new KeyTransfer.Request(successor, keyRange), getSelf());
-                    }
-
                 })
                 .match(GetActorRef.Request.class, requestMessage ->{
                     getSender().tell(new GetActorRef.Reply(this.storageActorRef), getSelf());
@@ -199,6 +187,8 @@ public class NodeActor extends AbstractActor {
                     // TODO: Remove Dublicate Ifs (to conform to pseudocode)
                     if (fingerTableService.getPredecessor().chordRef == null) {
                         fingerTableService.setPredecessor(msg.nPrime);
+                        System.out.println("Transferring keys...");
+                        transferKeysOnJoin();
                     } else if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, this.nodeId, msg.nPrime.id)) {
                         fingerTableService.setPredecessor(msg.nPrime);
                     } else {
@@ -345,6 +335,19 @@ public class NodeActor extends AbstractActor {
         }
 
         return result;
+    }
+
+    private void transferKeysOnJoin(){
+        // calculate key range by looking at predecessor value
+        List<Long> keyRange = LongStream.range(this.fingerTableService.getPredecessor().id + 1, this.nodeId)
+                .boxed()
+                .collect(Collectors.toList());
+
+        // tell my storageActor to ask my successor for transfer keys.
+        ActorRef successor = fingerTableService.getSuccessor().chordRef;
+        if(getSelf() != successor){
+            this.storageActorRef.tell(new KeyTransfer.Request(successor, keyRange), getSelf());
+        }
     }
 
 }
