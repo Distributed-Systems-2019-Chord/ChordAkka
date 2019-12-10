@@ -41,6 +41,8 @@ set WeLike 0 60 19
 Distributed Systems
 
 get WeLike
+
+delete WeLike
 ```
 ## Benchmarking with Memcache Protocol
 
