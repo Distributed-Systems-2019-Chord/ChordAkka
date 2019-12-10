@@ -65,7 +65,7 @@ class StorageActor extends AbstractActor {
                     getSender().tell(new KeyValue.GetSubsetReply(this.storageService.getSubset(getSubsetMessage.keys)), getSelf());
                 })
                 .match(KeyValue.Delete.class, deleteMessage -> {
-                    this.storageService.delete(deleteMessage.originalKey);
+                    this.storageService.delete(deleteMessage.hashKey);
                     getContext().getSender().tell(new KeyValue.DeleteReply(), ActorRef.noSender());
                 })
                 .build();

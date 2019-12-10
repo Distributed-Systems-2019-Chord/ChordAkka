@@ -115,16 +115,18 @@ public class NodeActor extends AbstractActor {
         if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Put(hashKey, value))) {
             putValueInStore(hashKey, value);
             getSender().tell(new KeyValue.PutReply(hashKey, value), getSelf());
-    private void putValueForKey(long hashKey, String originalKey, Serializable value) {
-        putValueForKey(new KeyValue.Put(originalKey, hashKey, value));
-    }
-
-    private void putValueForKey(KeyValue.Put msg) {
-        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
-            putValueInStore(msg);
-            getSender().tell(new KeyValue.PutReply(msg.originalKey, msg.hashKey, msg.value), getSelf());
         }
     }
+//    private void putValueForKey(long hashKey, String originalKey, Serializable value) {
+//        putValueForKey(new KeyValue.Put(originalKey, hashKey, value));
+//    }
+
+//    private void putValueForKey(KeyValue.Put msg) {
+//        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
+//            putValueInStore(msg);
+//            getSender().tell(new KeyValue.PutReply(msg.originalKey, msg.hashKey, msg.value), getSelf());
+//        }
+//    }
 
     private void deleteKey(KeyValue.Delete msg) {
         if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
@@ -143,9 +145,10 @@ public class NodeActor extends AbstractActor {
     //FIXME: Merge Conflict
     private void putValueInStore(long hashKey, Pair<String, Serializable> value) {
         storageActorRef.tell(new KeyValue.Put(hashKey, value), getSelf());
-    private void putValueInStore(long hashKey, String originalKey, Serializable value) {
-        putValueInStore(new KeyValue.Put(originalKey, hashKey, value));
     }
+//    private void putValueInStore(long hashKey, String originalKey, Serializable value) {
+//        putValueInStore(new KeyValue.Put(originalKey, hashKey, value));
+//    }
 
     private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
         if (nodeId == fingerTableService.getSuccessor().id) { // I'm the only node in the network
@@ -283,7 +286,7 @@ public class NodeActor extends AbstractActor {
                     putValueForKey(hashKey, value);
                     //FIXME: Merge Conflict
                     // We need to pass the original message, to ensure that memcache actor gets a reply
-                    putValueForKey(putValueMessage);
+//                    putValueForKey(putValueMessage);
                 })
                 .match(KeyValue.Delete.class, deleteMessage -> {
                     deleteKey(deleteMessage);

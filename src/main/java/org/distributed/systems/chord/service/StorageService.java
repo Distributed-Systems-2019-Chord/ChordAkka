@@ -28,14 +28,13 @@ public class StorageService {
     public void putAll(Map<Long, Pair<String, Serializable>> valueStore){
         this.valueStore.putAll(valueStore);
     }
-            //HashMap<Long, Pair<String, Serializable>>
     public  Map<Long, Pair<String, Serializable>> getSubset(List<Long> keys){
         return keys.stream()
                 .filter(this.valueStore::containsKey)
                 .collect(Collectors.toMap(Function.identity(), this.valueStore::get));
     }
 
-    public void delete(String originalKey) {
-        this.valueStore.remove(originalKey);
+    public void delete(Long key) {
+        this.valueStore.remove(key);
     }
 }
