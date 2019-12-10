@@ -20,7 +20,6 @@ import scala.concurrent.Future;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.concurrent.Callable;
 
 import static akka.dispatch.Futures.future;
 

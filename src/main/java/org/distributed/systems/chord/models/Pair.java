@@ -1,6 +1,8 @@
 package org.distributed.systems.chord.models;
 
-public class Pair<L,R> {
+import java.io.Serializable;
+
+public class Pair<L, R> implements Serializable {
 
     private final L originalKey;
     private final R value;
@@ -10,11 +12,18 @@ public class Pair<L,R> {
         this.value = value;
     }
 
-    public L getOriginalKey() { return originalKey; }
-    public R getValue() { return value; }
+    public L getOriginalKey() {
+        return originalKey;
+    }
+
+    public R getValue() {
+        return value;
+    }
 
     @Override
-    public int hashCode() { return originalKey.hashCode() ^ value.hashCode(); }
+    public int hashCode() {
+        return originalKey.hashCode() ^ value.hashCode();
+    }
 
     @Override
     public boolean equals(Object o) {
