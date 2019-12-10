@@ -126,6 +126,10 @@ public class NodeActor extends AbstractActor {
     }
 
     private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
+        if (nodeId == fingerTableService.getSuccessor().id) { // I'm the only node in the network
+            return true;
+        }
+
         // Between my predecessor and my node id
         if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, nodeId + 1, key)) {
             return true;
