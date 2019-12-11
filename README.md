@@ -25,9 +25,6 @@ To run regular nodes use parameter: `-Dconfig.resource=/regularNode.conf`
 
 To set your own node id specify `NODE_ID=x` in the environment variables.
 
-## Useful links
-- https://doc.akka.io/docs/akka/current/typed/guide/index.html
-
 ## Testing the Memcached Interface
 Either issue the following commands:
 `echo -e 'set WeLike 0 60 19\r\nDistributed Systems\r\n' | nc localhost 11211`
@@ -50,8 +47,12 @@ delete WeLike
 `memcslap --servers 127.0.0.1 --test=get`
 `memtier_benchmark --protocol=memcache_text --port 11211 --server=127.0.0.1`
 
-## Branching
+## Want to contribute?
+### Branching
 Branching will be done according the [Feature Branching Workflow](https://www.atlassian.com/git/tutorials/comparing-workflows/feature-branch-workflow).
 
-## Code Formatting
+### Code Formatting
 Standard IntelliJ java formatting profile
+
+### Useful links
+- https://doc.akka.io/docs/akka/current/typed/guide/index.html
