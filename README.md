@@ -47,6 +47,17 @@ delete WeLike
 `memcslap --servers 127.0.0.1 --test=get`
 `memtier_benchmark --protocol=memcache_text --port 11211 --server=127.0.0.1`
 
+## Benchmarking in Docker
+
+`docker-compose run benchmark --protocol=memcache_text --port 11211 --server=centralnode`
+
+## Open Telnet in Docker
+
+`docker-compose run shell`
+
+`telnet open centralnode 11211`
+and all the fun commands
+
 ## Want to contribute?
 ### Branching
 Branching will be done according the [Feature Branching Workflow](https://www.atlassian.com/git/tutorials/comparing-workflows/feature-branch-workflow).
