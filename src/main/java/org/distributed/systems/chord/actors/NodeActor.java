@@ -271,7 +271,11 @@ public class NodeActor extends AbstractActor {
                     deleteKey(deleteMessage);
                 })
                 .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey))
-                .matchEquals("killActor", m -> getContext().stop(getSelf()))
+                .matchEquals("killActor", m -> {
+                    System.out.println("killing myself");
+                    getContext().stop(getSelf());
+                    getSender().tell("done", getSelf());
+                })
                 .build();
     }
 
