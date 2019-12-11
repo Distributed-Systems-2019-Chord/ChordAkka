@@ -1,36 +1,29 @@
 # ChordAkka
-A Chord implementation based on Akka
-
-For now it's based on the following example: https://developer.lightbend.com/guides/akka-quickstart-java/index.html
+A Chord implementation based on Java [Akka](https://akka.io/).
 
 # Prerequisites 
 - [Maven](https://maven.apache.org/)
 - Java 11 or higher (openjdk)
 
 ## How to run
+
+### With maven:
 `mvn clean packge -DskipTests`
+
 `cd target`
+
 `java -Dconfig.resource=/centralNode.conf -jar chord-1.0-allinone.jar`
 
-Or use docker:
+### With docker:
 `docker-compose up`
+
+There are 2 types of nodes, a central and a regular node. The central node is used to join the network, this node should be started as the first node in the network so that others can join.
 
 To run central node use parameter: `-Dconfig.resource=/centralNode.conf`
 
 To run regular nodes use parameter: `-Dconfig.resource=/regularNode.conf`
 
-To set your own node id specify node.id=x in the environment variables.
-
-Test run: first run central node then run the regular node
-
-## Branching
-Branching will be done according the [Feature Branching Workflow](https://www.atlassian.com/git/tutorials/comparing-workflows/feature-branch-workflow).
-
-## Useful links
-- https://doc.akka.io/docs/akka/current/typed/guide/index.html
-
-## Code Formatting
-Standard IntelliJ java formatting profile
+To set your own node id specify `NODE_ID=x` in the environment variables.
 
 ## Testing the Memcached Interface
 Either issue the following commands:
@@ -53,3 +46,24 @@ delete WeLike
 
 `memcslap --servers 127.0.0.1 --test=get`
 `memtier_benchmark --protocol=memcache_text --port 11211 --server=127.0.0.1`
+
+## Benchmarking in Docker
+
+`docker-compose run benchmark --protocol=memcache_text --port 11211 --server=centralnode`
+
+## Open Telnet in Docker
+
+`docker-compose run shell`
+
+`telnet open centralnode 11211`
+and all the fun commands
+
+## Want to contribute?
+### Branching
+Branching will be done according the [Feature Branching Workflow](https://www.atlassian.com/git/tutorials/comparing-workflows/feature-branch-workflow).
+
+### Code Formatting
+Standard IntelliJ java formatting profile
+
+### Useful links
+- https://doc.akka.io/docs/akka/current/typed/guide/index.html

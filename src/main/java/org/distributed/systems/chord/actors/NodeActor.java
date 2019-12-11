@@ -2,6 +2,7 @@ package org.distributed.systems.chord.actors;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import akka.actor.CoordinatedShutdown;
 import akka.actor.Props;
 import akka.dispatch.OnComplete;
 import akka.event.Logging;
@@ -90,6 +91,13 @@ public class NodeActor extends AbstractActor {
         // to the fixFingerActor after 0ms repeating every 1000ms
         ActorRef fixFingerActor = getContext().actorOf(Props.create(FixFingerActor.class, getSelf()));
         getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(FIX_FINGER_SCHEDULE_TIME), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
+
+        //Hook up the node leave to the coordinated shutdown
+        CoordinatedShutdown.get(ChordStart.system)
+                .addJvmShutdownHook(() -> {
+                    leave();
+                    System.out.println("Leaving the network now...");
+                });
     }
 
     private void getValueForKey(long hashKey) {
@@ -267,6 +275,19 @@ public class NodeActor extends AbstractActor {
                     Pair<String, Serializable> value = putValueMessage.value;
                     putValueForKey(hashKey, value);
                 })
+                .match(KeyValue.GetAll.class, getAllMessage -> this.storageActorRef.forward(getAllMessage,getContext()))
+                .match(LeaveMessage.ForSuccessor.class, leaveMessage ->{
+                    log.info("got leave message successor");
+                    log.info("new predecessor is: " + leaveMessage.getPredecessor().id);
+                    leaveMessage.getKeyValues().forEach((key, value) -> log.info("got key value " +key + ":" + value));
+                    this.fingerTableService.setPredecessor(leaveMessage.getPredecessor());
+                    leaveMessage.getKeyValues().forEach((key, value) -> storageActorRef.tell(new KeyValue.Put(key,value),getSelf()));
+                })
+                .match(LeaveMessage.ForPredecessor.class, leaveMessage ->{
+                    log.info("got leave message predecessor");
+                    log.info("new successor is: " +leaveMessage.getSuccessor().id);
+                    this.fingerTableService.setSuccessor(leaveMessage.getSuccessor());
+                })
                 .match(KeyValue.Delete.class, deleteMessage -> {
                     deleteKey(deleteMessage);
                 })
@@ -289,6 +310,20 @@ public class NodeActor extends AbstractActor {
         return getSelf();
     }
 
+    private void leave(){
+        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+        Future<Object> getAllFuture = Patterns.ask(storageActorRef, new KeyValue.GetAll(), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+        KeyValue.GetAllReply reply = null;
+        try {
+            reply = (KeyValue.GetAllReply)Await.result(getAllFuture,timeout.duration());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println("Retrieved values");
+        reply.keys.forEach((key, value) -> System.out.println(key + ":" + value));
+        fingerTableService.getPredecessor().chordRef.tell(new LeaveMessage.ForPredecessor(fingerTableService.getSuccessor()),getSelf());
+        fingerTableService.getSuccessor().chordRef.tell(new LeaveMessage.ForSuccessor(fingerTableService.getPredecessor(),reply.keys),getSelf());
+    }
     private void fix_fingers() {
         fix_fingers_next++;
 
