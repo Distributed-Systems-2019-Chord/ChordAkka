@@ -2,6 +2,7 @@ package org.distributed.systems.chord.actors;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import akka.actor.CoordinatedShutdown;
 import akka.actor.Props;
 import akka.dispatch.OnComplete;
 import akka.event.Logging;
@@ -16,6 +17,7 @@ import com.typesafe.config.Config;
 import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.messaging.*;
 import org.distributed.systems.chord.models.ChordNode;
+import org.distributed.systems.chord.models.Pair;
 import org.distributed.systems.chord.service.FingerTableService;
 import org.distributed.systems.chord.util.CompareUtil;
 import org.distributed.systems.chord.util.Util;
@@ -27,6 +29,9 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.time.Duration;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 public class NodeActor extends AbstractActor {
 
@@ -86,34 +91,37 @@ public class NodeActor extends AbstractActor {
         // to the fixFingerActor after 0ms repeating every 1000ms
         ActorRef fixFingerActor = getContext().actorOf(Props.create(FixFingerActor.class, getSelf()));
         getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(FIX_FINGER_SCHEDULE_TIME), fixFingerActor, "FixFinger", getContext().system().dispatcher(), ActorRef.noSender());
+
+        //Hook up the node leave to the coordinated shutdown
+        CoordinatedShutdown.get(ChordStart.system)
+                .addJvmShutdownHook(() -> {
+                    leave();
+                    System.out.println("Leaving the network now...");
+                });
     }
 
-    private void getValueForKey(long hashKey, String originalKey) {
-        if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Get(originalKey, hashKey))) {
-            getValueFromStorageActor(hashKey, originalKey);
+    private void getValueForKey(long hashKey) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Get(hashKey))) {
+            getValueFromStorageActor(hashKey);
         }
     }
 
-    private void getValueFromStorageActor(long hashKey, String originalKey) {
-        KeyValue.Get getRequest = new KeyValue.Get(originalKey, hashKey);
+    private void getValueFromStorageActor(long hashKey) {
+        KeyValue.Get getRequest = new KeyValue.Get(hashKey);
         Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
         Future<Object> valueResponse = Patterns.ask(this.storageActorRef, getRequest, timeout);
         try {
-            Serializable value = ((KeyValue.GetReply) Await.result(valueResponse, timeout.duration())).value;
-            getSender().tell(new KeyValue.GetReply(originalKey, hashKey, value), getSelf());
+            Pair<String, Serializable> value = ((KeyValue.GetReply) Await.result(valueResponse, timeout.duration())).value;
+            getSender().tell(new KeyValue.GetReply(hashKey, value), getSelf());
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void putValueForKey(long hashKey, String originalKey, Serializable value) {
-        putValueForKey(new KeyValue.Put(originalKey, hashKey, value));
-    }
-
-    private void putValueForKey(KeyValue.Put msg) {
-        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
-            putValueInStore(msg);
-            getSender().tell(new KeyValue.PutReply(msg.originalKey, msg.hashKey, msg.value), getSelf());
+    private void putValueForKey(long hashKey, Pair<String, Serializable> value) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Put(hashKey, value))) {
+            putValueInStore(hashKey, value);
+            getSender().tell(new KeyValue.PutReply(hashKey, value), getSelf());
         }
     }
 
@@ -125,14 +133,12 @@ public class NodeActor extends AbstractActor {
         }
     }
 
-    private void deleteKeyInStore(KeyValue.Delete msg) { storageActorRef.tell(msg, getSelf()); }
-
-    private void putValueInStore(KeyValue.Put msg) {
+    private void deleteKeyInStore(KeyValue.Delete msg) {
         storageActorRef.tell(msg, getSelf());
     }
 
-    private void putValueInStore(long hashKey, String originalKey, Serializable value) {
-        putValueInStore(new KeyValue.Put(originalKey, hashKey, value));
+    private void putValueInStore(long hashKey, Pair<String, Serializable> value) {
+        storageActorRef.tell(new KeyValue.Put(hashKey, value), getSelf());
     }
 
     private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
@@ -168,6 +174,10 @@ public class NodeActor extends AbstractActor {
                     System.out.println("NodeActor " + this.nodeId + "joined! ");
                     System.out.println("Successor: " + this.fingerTableService.getSuccessor());
                     fingerTableService.printFingerTable(true);
+
+                })
+                .match(GetActorRef.Request.class, requestMessage -> {
+                    getSender().tell(new GetActorRef.Reply(this.storageActorRef), getSelf());
                 })
                 .match(Stabilize.Request.class, msg -> {
 
@@ -175,7 +185,7 @@ public class NodeActor extends AbstractActor {
                     ChordNode x = fingerTableService.getPredecessor();
                     if (getSelf() != fingerTableService.getSuccessor().chordRef) {
                         Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-                        Future<Object> fsFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new Predecessor.Request(), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+                        Future<Object> fsFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new Predecessor.Request(), timeout);
                         Predecessor.Reply rply = (Predecessor.Reply) Await.result(fsFuture, timeout.duration());
 
                         x = rply.predecessor;
@@ -201,6 +211,7 @@ public class NodeActor extends AbstractActor {
                     // TODO: Remove Dublicate Ifs (to conform to pseudocode)
                     if (fingerTableService.getPredecessor().chordRef == null) {
                         fingerTableService.setPredecessor(msg.nPrime);
+                        transferKeysOnJoin();
                     } else if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, this.nodeId, msg.nPrime.id)) {
                         fingerTableService.setPredecessor(msg.nPrime);
                     } else {
@@ -259,13 +270,28 @@ public class NodeActor extends AbstractActor {
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {
-                    // We need to pass the original message, to ensure that memcache actor gets a reply
-                    putValueForKey(putValueMessage);
+
+                    long hashKey = putValueMessage.hashKey;
+                    Pair<String, Serializable> value = putValueMessage.value;
+                    putValueForKey(hashKey, value);
+                })
+                .match(KeyValue.GetAll.class, getAllMessage -> this.storageActorRef.forward(getAllMessage,getContext()))
+                .match(LeaveMessage.ForSuccessor.class, leaveMessage ->{
+                    log.info("got leave message successor");
+                    log.info("new predecessor is: " + leaveMessage.getPredecessor().id);
+                    leaveMessage.getKeyValues().forEach((key, value) -> log.info("got key value " +key + ":" + value));
+                    this.fingerTableService.setPredecessor(leaveMessage.getPredecessor());
+                    leaveMessage.getKeyValues().forEach((key, value) -> storageActorRef.tell(new KeyValue.Put(key,value),getSelf()));
+                })
+                .match(LeaveMessage.ForPredecessor.class, leaveMessage ->{
+                    log.info("got leave message predecessor");
+                    log.info("new successor is: " +leaveMessage.getSuccessor().id);
+                    this.fingerTableService.setSuccessor(leaveMessage.getSuccessor());
                 })
                 .match(KeyValue.Delete.class, deleteMessage -> {
                     deleteKey(deleteMessage);
                 })
-                .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey, getValueMessage.originalKey))
+                .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey))
                 .build();
     }
 
@@ -279,6 +305,20 @@ public class NodeActor extends AbstractActor {
         return getSelf();
     }
 
+    private void leave(){
+        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+        Future<Object> getAllFuture = Patterns.ask(storageActorRef, new KeyValue.GetAll(), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+        KeyValue.GetAllReply reply = null;
+        try {
+            reply = (KeyValue.GetAllReply)Await.result(getAllFuture,timeout.duration());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println("Retrieved values");
+        reply.keys.forEach((key, value) -> System.out.println(key + ":" + value));
+        fingerTableService.getPredecessor().chordRef.tell(new LeaveMessage.ForPredecessor(fingerTableService.getSuccessor()),getSelf());
+        fingerTableService.getSuccessor().chordRef.tell(new LeaveMessage.ForSuccessor(fingerTableService.getPredecessor(),reply.keys),getSelf());
+    }
     private void fix_fingers() {
         fix_fingers_next++;
 
@@ -348,6 +388,20 @@ public class NodeActor extends AbstractActor {
         }
 
         return result;
+    }
+
+    private void transferKeysOnJoin() {
+        // calculate key range by looking at predecessor value
+        List<Long> keyRange = LongStream.range(this.fingerTableService.getPredecessor().id + 1, this.nodeId)
+                .boxed()
+                .collect(Collectors.toList());
+
+        // tell my storageActor to ask my successor for transfer keys.
+        ActorRef successor = fingerTableService.getSuccessor().chordRef;
+        if (getSelf() != successor) {
+            System.out.println("Transferring keys...");
+            this.storageActorRef.tell(new KeyTransfer.Request(successor, keyRange), getSelf());
+        }
     }
 
 }
