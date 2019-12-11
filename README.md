@@ -26,3 +26,25 @@ Branching will be done according the [Feature Branching Workflow](https://www.at
 
 ## Code Formatting
 Standard IntelliJ java formatting profile
+
+## Testing the Memcached Interface
+Either issue the following commands:
+`echo -e 'set WeLike 0 60 19\r\nDistributed Systems\r\n' | nc localhost 11211`
+`echo -e 'get WeLike\r\n' | nc localhost 11211`
+
+Or use a TCP-connection such as telnet:
+```
+telnet
+toggle crlf
+open 127.0.0.1:11211
+set WeLike 0 60 19
+Distributed Systems
+
+get WeLike
+
+delete WeLike
+```
+## Benchmarking with Memcache Protocol
+
+`memcslap --servers 127.0.0.1 --test=get`
+`memtier_benchmark --protocol=memcache_text --port 11211 --server=127.0.0.1`

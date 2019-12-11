@@ -13,6 +13,7 @@ class StorageActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private StorageService storageService;
 
+
     public StorageActor() {
         this.storageService = new StorageService();
     }
@@ -21,20 +22,26 @@ class StorageActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(KeyValue.Put.class, putValueMessage -> {
-                    String key = putValueMessage.key;
+                    long hashKey = putValueMessage.hashKey;
                     Serializable value = putValueMessage.value;
-                    log.info("Put for key, value: " + key + " " + value);
-                    this.storageService.put(key, value);
+                    System.out.println("Put key " + hashKey);
+                    this.storageService.put(putValueMessage.originalKey, value);
 
                     ActorRef optionalSender = getContext().getSender();
                     if (optionalSender != getContext().getSystem().deadLetters()) {
-                        optionalSender.tell(new KeyValue.PutReply(), ActorRef.noSender());
+                        optionalSender.tell(new KeyValue.PutReply(putValueMessage.originalKey, hashKey, value), ActorRef.noSender());
                     }
 
                 })
                 .match(KeyValue.Get.class, getValueMessage -> {
-                    Serializable val = this.storageService.get(getValueMessage.key);
-                    getContext().getSender().tell(new KeyValue.GetReply(val), ActorRef.noSender());
+                    long key = getValueMessage.hashKey;
+                    System.out.println("GET key " + key);
+                    Serializable val = this.storageService.get(getValueMessage.originalKey);
+                    getContext().getSender().tell(new KeyValue.GetReply(getValueMessage.originalKey, key, val), ActorRef.noSender());
+                })
+                .match(KeyValue.Delete.class, deleteMessage -> {
+                    this.storageService.delete(deleteMessage.originalKey);
+                    getContext().getSender().tell(new KeyValue.DeleteReply(), ActorRef.noSender());
                 })
                 .build();
     }

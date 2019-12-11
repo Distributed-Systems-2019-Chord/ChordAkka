@@ -64,6 +64,8 @@ public class NodeActor extends AbstractActor {
         // Init the FingerTable
         fingerTableService = new FingerTableService(this.nodeId);
 
+        createMemCacheTCPSocket();
+
         if (this.type.equals("central")) {
             fingerTableService.setSuccessor(new ChordNode(this.nodeId, getSelf()));
             System.out.println("Bootstrapped Central NodeActor");
@@ -93,6 +95,70 @@ public class NodeActor extends AbstractActor {
         getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(CHECK_PREDECESSOR_SCHEDULE_TIME), checkPredecessorActor, "CheckPredecessor", getContext().system().dispatcher(), ActorRef.noSender());
     }
 
+    private void getValueForKey(long hashKey, String originalKey) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(hashKey, new KeyValue.Get(originalKey, hashKey))) {
+            getValueFromStorageActor(hashKey, originalKey);
+        }
+    }
+
+    private void getValueFromStorageActor(long hashKey, String originalKey) {
+        KeyValue.Get getRequest = new KeyValue.Get(originalKey, hashKey);
+        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+        Future<Object> valueResponse = Patterns.ask(this.storageActorRef, getRequest, timeout);
+        try {
+            Serializable value = ((KeyValue.GetReply) Await.result(valueResponse, timeout.duration())).value;
+            getSender().tell(new KeyValue.GetReply(originalKey, hashKey, value), getSelf());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void putValueForKey(long hashKey, String originalKey, Serializable value) {
+        putValueForKey(new KeyValue.Put(originalKey, hashKey, value));
+    }
+
+    private void putValueForKey(KeyValue.Put msg) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
+            putValueInStore(msg);
+            getSender().tell(new KeyValue.PutReply(msg.originalKey, msg.hashKey, msg.value), getSelf());
+        }
+    }
+
+    private void deleteKey(KeyValue.Delete msg) {
+        if (shouldKeyBeOnThisNodeOtherwiseForward(msg.hashKey, msg)) {
+            // TODO: What if not found, memcached actually likes "not found" things
+            deleteKeyInStore(msg);
+            getSender().tell(new KeyValue.DeleteReply(), getSelf());
+        }
+    }
+
+    private void deleteKeyInStore(KeyValue.Delete msg) { storageActorRef.tell(msg, getSelf()); }
+
+    private void putValueInStore(KeyValue.Put msg) {
+        storageActorRef.tell(msg, getSelf());
+    }
+
+    private void putValueInStore(long hashKey, String originalKey, Serializable value) {
+        putValueInStore(new KeyValue.Put(originalKey, hashKey, value));
+    }
+
+    private boolean shouldKeyBeOnThisNodeOtherwiseForward(long key, Command commandMessage) {
+        if (nodeId == fingerTableService.getSuccessor().id) { // I'm the only node in the network
+            return true;
+        }
+
+        // Between my predecessor and my node id
+        if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, nodeId + 1, key)) {
+            return true;
+        } else if (CompareUtil.isBetweenExclusive(nodeId, fingerTableService.getSuccessor().id + 1, key)) {
+            fingerTableService.getSuccessor().chordRef.forward(commandMessage, getContext());
+            return false;
+        } else {
+            closest_preceding_node(key).forward(commandMessage, getContext());
+            return false;
+        }
+    }
+
     @Override
     public Receive createReceive() {
         log.info("Received a message");
@@ -112,6 +178,13 @@ public class NodeActor extends AbstractActor {
                     }catch(Exception e){
                         System.out.println("Something went wrong | Join");
                     }
+                    Future<Object> centralNodeFuture = Patterns.ask(msg.requestor, new FindSuccessor.Request(this.nodeId, 0), timeout);
+                    FindSuccessor.Reply rply = (FindSuccessor.Reply) Await.result(centralNodeFuture, timeout.duration());
+
+                    fingerTableService.setSuccessor(new ChordNode(rply.id, rply.succesor));
+                    System.out.println("NodeActor " + this.nodeId + "joined! ");
+                    System.out.println("Successor: " + this.fingerTableService.getSuccessor());
+                    fingerTableService.printFingerTable(true);
                 })
                 .match(Stabilize.Request.class, msg -> {
 
@@ -134,13 +207,13 @@ public class NodeActor extends AbstractActor {
                         // NodeActor is the only one in the network (Should be removable!)
                         if (this.nodeId == this.fingerTableService.getSuccessor().id && x.id != this.nodeId) {
                             fingerTableService.setSuccessor(x);
-                        } else if (CompareUtil.isBetweenExeclusive(this.nodeId, this.fingerTableService.getSuccessor().id, x.id)) {
+                        } else if (CompareUtil.isBetweenExclusive(this.nodeId, this.fingerTableService.getSuccessor().id, x.id)) {
                             fingerTableService.setSuccessor(x);
                         }
                     }
                     // Notify Successor that this node might be it's new predecessor
                     this.fingerTableService.getSuccessor().chordRef.tell(new Notify.Request(new ChordNode(this.nodeId, getSelf())), getSelf());
-                    System.out.println(fingerTableService.toString());
+                    // System.out.println(fingerTableService.toString());
                 })
                 // .predecessor RPC
                 .match(Predecessor.Request.class, msg -> getSender().tell(new Predecessor.Reply(fingerTableService.getPredecessor()), getSelf()))
@@ -149,20 +222,20 @@ public class NodeActor extends AbstractActor {
                     // TODO: Remove Dublicate Ifs (to conform to pseudocode)
                     if (fingerTableService.getPredecessor().chordRef == null) {
                         fingerTableService.setPredecessor(msg.nPrime);
-                    } else if (CompareUtil.isBetweenExeclusive(fingerTableService.getPredecessor().id, this.nodeId, msg.nPrime.id)) {
+                    } else if (CompareUtil.isBetweenExclusive(fingerTableService.getPredecessor().id, this.nodeId, msg.nPrime.id)) {
                         fingerTableService.setPredecessor(msg.nPrime);
                     } else {
                         // Skip output if nothing changes
                         return;
                     }
-                    System.out.println(fingerTableService.toString());
+                    // System.out.println(fingerTableService.toString());
                 })
                 .match(FindSuccessor.Request.class, msg -> {
                     // +1 to do inclusive interval
                     // Single NodeActor Edge Case: this.nodeId == this.succId
                     if (this.nodeId == this.fingerTableService.getSuccessor().id) {
                         getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableService.getSuccessor().chordRef, this.fingerTableService.getSuccessor().id, msg.fingerTableIndex), getSelf());
-                    } else if (CompareUtil.isBetweenExeclusive(this.nodeId, this.fingerTableService.getSuccessor().id + 1, msg.id)) {
+                    } else if (CompareUtil.isBetweenExclusive(this.nodeId, this.fingerTableService.getSuccessor().id + 1, msg.id)) {
                         getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableService.getSuccessor().chordRef, this.fingerTableService.getSuccessor().id, msg.fingerTableIndex), getSelf());
                     } else {
                         ActorRef ndash = this.closest_preceding_node(msg.id);
@@ -179,7 +252,7 @@ public class NodeActor extends AbstractActor {
                     }
 
                     fingerTableService.setFingerEntryForIndex(msg.fingerTableIndex, msg.chordNode);
-                    System.out.println(fingerTableService.toString());
+                    fingerTableService.printFingerTable(false);
 
                 })
                 .match(CheckPredecessor.Request.class, msg -> {
@@ -214,18 +287,18 @@ public class NodeActor extends AbstractActor {
                     }
                 })
                 .match(Connected.class, conn -> {
-                    System.out.println("MemCache Client connected");
                     manager.tell(conn, getSelf());
-                    ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, storageActorRef));
+                    ActorRef memcacheHandler = getContext().actorOf(Props.create(MemcachedActor.class, self()));
                     getSender().tell(TcpMessage.register(memcacheHandler), getSelf());
                 })
                 .match(KeyValue.Put.class, putValueMessage -> {
-                    String key = putValueMessage.key;
-                    Serializable value = putValueMessage.value;
-                    log.info("key, value: " + key + " " + value);
-                    this.storageActorRef.forward(putValueMessage, getContext());
+                    // We need to pass the original message, to ensure that memcache actor gets a reply
+                    putValueForKey(putValueMessage);
                 })
-                .match(KeyValue.Get.class, getValueMessage -> this.storageActorRef.forward(getValueMessage, getContext()))
+                .match(KeyValue.Delete.class, deleteMessage -> {
+                    deleteKey(deleteMessage);
+                })
+                .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey, getValueMessage.originalKey))
                 .build();
     }
 
@@ -233,7 +306,7 @@ public class NodeActor extends AbstractActor {
         for (int i = ChordStart.M - 1; i >= 0; i--) {
             if (fingerTableService.getEntryForIndex(i) == null)
                 continue;
-            if (CompareUtil.isBetweenExeclusive(this.nodeId, id, fingerTableService.getEntryForIndex(i).id))
+            if (CompareUtil.isBetweenExclusive(this.nodeId, id, fingerTableService.getEntryForIndex(i).id))
                 return fingerTableService.getEntryForIndex(i).chordRef;
         }
         return getSelf();
@@ -311,7 +384,7 @@ public class NodeActor extends AbstractActor {
         // Calculate a unique port based on the nodeId, if the port is already taken:
         if (isPortInUse(hostname, port)) {
             // TODO: Nicer heuristic to find a good suitable port
-            port = port + (int) this.nodeId;
+            port = port + 1;
         }
 
         InetSocketAddress tcp_socked = new InetSocketAddress(hostname, port);
