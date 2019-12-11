@@ -15,6 +15,15 @@ services:
       - 11211:11211
     networks:
       - chord_network
+  shell:
+    image: busybox
+    networks:
+      - chord_network
+  benchmark:
+      image: redislabs/memtier_benchmark
+      networks:
+        - chord_network
+      command: "echo 'run via shell'"
 networks:
   chord_network:
     name: chord_network
