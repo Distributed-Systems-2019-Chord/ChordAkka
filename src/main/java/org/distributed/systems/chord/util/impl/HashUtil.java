@@ -1,8 +1,9 @@
 package org.distributed.systems.chord.util.impl;
 
+import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.util.IHashUtil;
 
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
@@ -17,16 +18,15 @@ public class HashUtil implements IHashUtil {
      */
     @Override
     public Long hash(String input) {
-        Long sha1 = null;
         try {
             MessageDigest crypt = MessageDigest.getInstance("SHA-1");
             crypt.reset();
-            crypt.update(input.getBytes("UTF-8"));
-            sha1 = byteToLong(crypt.digest());
-        } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+            crypt.update(input.getBytes(StandardCharsets.UTF_8));
+            return Math.floorMod(byteToLong(crypt.digest()), ChordStart.AMOUNT_OF_KEYS);
+        } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
+            return null;
         }
-        return sha1;
     }
 
     private static String byteToHex(final byte[] hash) {
@@ -50,7 +50,7 @@ public class HashUtil implements IHashUtil {
         }
 
         long ret = (compressed[0] & 0xFF) << 24 | (compressed[1] & 0xFF) << 16 | (compressed[2] & 0xFF) << 8 | (compressed[3] & 0xFF);
-        ret = ret & (long) 0xFFFFFFFFL;
+        ret = ret & 0xFFFFFFFFL;
         return ret;
     }
 }

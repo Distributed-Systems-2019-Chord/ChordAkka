@@ -1,10 +1,10 @@
 package org.distributed.systems.chord.util;
 
 import com.typesafe.config.Config;
-import org.distributed.systems.ChordStart;
 import org.distributed.systems.chord.util.impl.HashUtil;
 
 import java.net.InetAddress;
+import java.util.UUID;
 
 public class Util {
 
@@ -33,14 +33,11 @@ public class Util {
     }
 
 
-    public static long getNodeId(Config config) {
+    public static long getNodeId() {
         long envVal;
         HashUtil hashUtil = new HashUtil();
         if (System.getenv("NODE_ID") == null) {
-            String hostName = config.getString("akka.remote.artery.canonical.hostname");
-            String port = config.getString("akka.remote.artery.canonical.port");
-            // FIXME Should be IP
-            envVal = Math.floorMod(hashUtil.hash(hostName + ":" + port), ChordStart.AMOUNT_OF_KEYS);
+            envVal = hashUtil.hash(UUID.randomUUID().toString());
         } else {
             envVal = Long.parseLong(System.getenv("NODE_ID"));
         }
