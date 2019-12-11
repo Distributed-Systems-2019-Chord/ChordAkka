@@ -28,12 +28,25 @@ public class KeyValue {
             this.value = value;
         }
     }
-
     public static class Get implements Command {
         public final long hashKey;
 
         public Get(long hashKey) {
             this.hashKey = hashKey;
+        }
+    }
+    public static class GetAll implements Command {
+
+        public GetAll() {
+
+        }
+    }
+
+    public static class GetAllReply implements Response {
+        public final Map<Long, Pair<String, Serializable>> keys;
+
+        public GetAllReply(Map<Long, Pair<String, Serializable>> keys) {
+            this.keys = keys;
         }
     }
 

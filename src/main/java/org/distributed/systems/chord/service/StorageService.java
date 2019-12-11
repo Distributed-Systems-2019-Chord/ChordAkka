@@ -25,6 +25,10 @@ public class StorageService {
         return this.valueStore.get(key);
     }
 
+    public Map<Long, Pair<String,Serializable>> getAll(){
+        return this.valueStore;
+    }
+
     public void putAll(Map<Long, Pair<String, Serializable>> valueStore) {
         this.valueStore.putAll(valueStore);
     }

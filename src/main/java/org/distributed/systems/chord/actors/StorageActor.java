@@ -16,6 +16,7 @@ import scala.concurrent.Await;
 import scala.concurrent.Future;
 
 import java.io.Serializable;
+import java.util.Map;
 import java.time.Duration;
 
 class StorageActor extends AbstractActor {
@@ -75,6 +76,10 @@ class StorageActor extends AbstractActor {
                 .match(KeyValue.Delete.class, deleteMessage -> {
                     this.storageService.delete(deleteMessage.hashKey);
                     getContext().getSender().tell(new KeyValue.DeleteReply(), ActorRef.noSender());
+                })
+                .match(KeyValue.GetAll.class, getAllMessage->{
+                    Map<Long, Pair<String, Serializable>> keyValues = this.storageService.getAll();
+                    getContext().getSender().tell(new KeyValue.GetAllReply(keyValues), ActorRef.noSender());
                 })
                 .build();
     }
