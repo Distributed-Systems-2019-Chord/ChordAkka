@@ -19,11 +19,12 @@ services:
     image: busybox
     networks:
       - chord_network
+    command: "echo 'run via compose'"
   benchmark:
       image: redislabs/memtier_benchmark
       networks:
         - chord_network
-      command: "echo 'run via shell'"
+      command: "--version"
 networks:
   chord_network:
     name: chord_network
