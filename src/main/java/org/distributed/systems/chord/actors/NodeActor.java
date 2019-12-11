@@ -167,7 +167,7 @@ public class NodeActor extends AbstractActor {
                     System.out.println("NodeActor " + this.nodeId + " wants to join");
 
                     Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-                    Future<Object> centralNodeFuture = Patterns.ask(msg.requestor, new FindSuccessor.Request(this.nodeId, 0), timeout);
+                    Future<Object> centralNodeFuture = Patterns.ask(msg.requestor, new FindSuccessor.Request(this.nodeId, 0, 0), timeout);
                     FindSuccessor.Reply rply = (FindSuccessor.Reply) Await.result(centralNodeFuture, timeout.duration());
 
                     fingerTableService.setSuccessor(new ChordNode(rply.id, rply.succesor));
@@ -224,12 +224,13 @@ public class NodeActor extends AbstractActor {
                     // +1 to do inclusive interval
                     // Single NodeActor Edge Case: this.nodeId == this.succId
                     if (this.nodeId == this.fingerTableService.getSuccessor().id) {
-                        getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableService.getSuccessor().chordRef, this.fingerTableService.getSuccessor().id, msg.fingerTableIndex), getSelf());
+                        getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableService.getSuccessor().chordRef, this.fingerTableService.getSuccessor().id, msg.fingerTableIndex, msg.amountOfHops), getSelf());
                     } else if (CompareUtil.isBetweenExclusive(this.nodeId, this.fingerTableService.getSuccessor().id + 1, msg.id)) {
-                        getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableService.getSuccessor().chordRef, this.fingerTableService.getSuccessor().id, msg.fingerTableIndex), getSelf());
+                        getContext().getSender().tell(new FindSuccessor.Reply(this.fingerTableService.getSuccessor().chordRef, this.fingerTableService.getSuccessor().id, msg.fingerTableIndex, msg.amountOfHops), getSelf());
                     } else {
                         ActorRef ndash = this.closest_preceding_node(msg.id);
-                        ndash.forward(msg, getContext());
+                        FindSuccessor.Request newMsg = new FindSuccessor.Request(msg.id, msg.fingerTableIndex, msg.amountOfHops + 1);
+                        ndash.forward(newMsg, getContext());
                     }
                 })
                 .match(FixFingers.Request.class, msg -> this.fix_fingers())
@@ -334,7 +335,7 @@ public class NodeActor extends AbstractActor {
         long lookup_id = (this.nodeId + idx) % ChordStart.AMOUNT_OF_KEYS;
 
         // Get The Successor For This Id
-        Future<Object> fsFuture = Patterns.ask(this.fingerTableService.getSuccessor().chordRef, new FindSuccessor.Request(lookup_id, fix_fingers_next - 1), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
+        Future<Object> fsFuture = Patterns.ask(this.fingerTableService.getSuccessor().chordRef, new FindSuccessor.Request(lookup_id, fix_fingers_next - 1, 0), Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT)));
         fsFuture.onComplete(
                 new OnComplete<Object>() {
                     public void onComplete(Throwable failure, Object result) {
