@@ -8,7 +8,6 @@ public class Predecessor {
     public static class Request implements Command {
         public final List<Long> succList;
         public Request(List<Long> succList) {
-
             this.succList = succList;
         }
     }
@@ -20,11 +19,6 @@ public class Predecessor {
         public Reply(ChordNode predecessor,  List<ChordNode> succList) {
             this.predecessor = predecessor;
             this.succList = succList;
-        }
-
-        public Reply(ChordNode predecessor) {
-            this.predecessor = predecessor;
-            this.succList = null;
         }
     }
 }
