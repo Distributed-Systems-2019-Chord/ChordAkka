@@ -32,7 +32,6 @@ import java.net.SocketException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
@@ -46,7 +45,7 @@ public class NodeActor extends AbstractActor {
     private static final int MEMCACHE_MIN_PORT = 11211;
     private static final int MEMCACHE_MAX_PORT = 12235;
     private static final int STABILIZE_SCHEDULE_TIME = 5000;
-    private static final int CHECK_PREDECESSOR_SCHEDULE_TIME = 5000;
+    private static final int CHECK_PREDECESSOR_SCHEDULE_TIME = 7000;
     private static final int FIX_FINGER_SCHEDULE_TIME = 1000;
     private final ActorRef manager;
 
