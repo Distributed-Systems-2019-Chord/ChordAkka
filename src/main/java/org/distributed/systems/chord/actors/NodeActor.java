@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
+import static akka.dispatch.Futures.future;
+
 public class NodeActor extends AbstractActor {
 
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
@@ -201,53 +203,60 @@ public class NodeActor extends AbstractActor {
                 })
                 .match(Stabilize.Request.class, msg -> {
 
-                    // TODO: Currently blocking, and thus is stuck sometimes > prevent RPC if call same node
-                    Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
-                    ChordNode x = fingerTableService.getPredecessor();
-                    List<ChordNode> succList = null;
-                    if (getSelf() != fingerTableService.getSuccessor().chordRef) {
+                    // Stabilize Async to prevent Akka blocking:
+                    Future<Object> stabilizeFuture = future(() -> {
 
-                        // if available, then stabilize (notify successor and reconcile with successor)
-                        try {
-                            Future<Object> fsFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new Predecessor.Request(successorListService.getAllButFirst()), timeout);
-                            Predecessor.Reply rply = (Predecessor.Reply) Await.result(fsFuture, timeout.duration());
-                            x = rply.predecessor;
-                            succList = rply.succList;
-                        } catch (Exception e) {
-                            if (successorListService.getList().isEmpty()) {
-                                x = new ChordNode(fingerTableService.NOT_SET, null);
-                            } else {
-                                x = successorListService.getList().get(1);
+                        Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
+                        ChordNode x = fingerTableService.getPredecessor();
+                        List<ChordNode> succList = null;
+
+                        // Get the current x (fail-safe, so it get's it from the succesorListService)
+                        if (getSelf() != fingerTableService.getSuccessor().chordRef) {
+                            // if available, then stabilize (notify successor and reconcile with successor)
+                            try {
+                                Future<Object> fsFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new Predecessor.Request(successorListService.getAllButFirst()), timeout);
+                                Predecessor.Reply rply = (Predecessor.Reply) Await.result(fsFuture, timeout.duration());
+                                x = rply.predecessor;
+                                succList = rply.succList;
+                            } catch (Exception e) {
+                                if (successorListService.getList().isEmpty()) {
+                                    x = new ChordNode(fingerTableService.NOT_SET, null);
+                                } else {
+                                    x = successorListService.getList().get(1);
+                                }
                             }
                         }
-                    }
 
-                    // TODO: Refactor several ifs, which check x in (n , successor) including the "over-zero" case
-                    if (x.chordRef != null) {
-                        // NodeActor is the only one in the network (Should be removable!)
-                        if (this.nodeId == this.fingerTableService.getSuccessor().id && x.id != this.nodeId) {
-                            fingerTableService.setSuccessor(x);
-                            successorListService.removeLastEntry();
-                            successorListService.prependEntry(x);
-                        } else if (CompareUtil.isBetweenExclusive(this.nodeId, this.fingerTableService.getSuccessor().id, x.id)) {
-                            fingerTableService.setSuccessor(x);
-                            successorListService.removeLastEntry();
-                            successorListService.prependEntry(x);
+                        if (x.chordRef != null) {
+                            // NodeActor is the only one in the network (Should be removable!)
+                            if (this.nodeId == this.fingerTableService.getSuccessor().id && x.id != this.nodeId) {
+                                fingerTableService.setSuccessor(x);
+                                successorListService.removeLastEntry();
+                                successorListService.prependEntry(x);
+                            } else if (CompareUtil.isBetweenExclusive(this.nodeId, this.fingerTableService.getSuccessor().id, x.id)) {
+                                fingerTableService.setSuccessor(x);
+                                successorListService.removeLastEntry();
+                                successorListService.prependEntry(x);
+                            }
                         }
-                    }
 
-                    if (succList != null && !succList.isEmpty()) {
-                        succList.remove(succList.size() - 1);
-                        List<ChordNode> newUpdatedList = new ArrayList<>();
-                        newUpdatedList.add(fingerTableService.getSuccessor());
-                        newUpdatedList.addAll(succList);
-                        if (!newUpdatedList.equals(successorListService.getList())) {
-                            successorListService.setList(newUpdatedList);
+                        if (succList != null && !succList.isEmpty()) {
+                            succList.remove(succList.size() - 1);
+                            List<ChordNode> newUpdatedList = new ArrayList<>();
+                            newUpdatedList.add(fingerTableService.getSuccessor());
+                            newUpdatedList.addAll(succList);
+                            if (!newUpdatedList.equals(successorListService.getList())) {
+                                successorListService.setList(newUpdatedList);
+                            }
                         }
-                    }
 
-                    // Notify Successor that this node might be it's new predecessor
-                    this.fingerTableService.getSuccessor().chordRef.tell(new Notify.Request(new ChordNode(this.nodeId, getSelf())), getSelf());
+                        // Notify Successor that this node might be it's new predecessor
+                        this.fingerTableService.getSuccessor().chordRef.tell(new Notify.Request(new ChordNode(this.nodeId, getSelf())), getSelf());
+
+                        return true;
+
+                    }, getContext().getSystem().getDispatcher());
+
                 })
                 // .predecessor RPC
                 .match(Predecessor.Request.class, msg -> {
