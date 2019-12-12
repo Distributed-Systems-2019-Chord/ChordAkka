@@ -21,10 +21,6 @@ public class SuccessorListService {
             this.successorList.remove(successorList.size() -1);
     }
 
-    public void replaceAll(ChordNode nodeToReplace, ChordNode newNode){
-        this.successorList.stream().map(s -> s.id == nodeToReplace.id ? newNode: s).collect(Collectors.toList());
-    }
-
     public void prependEntry(ChordNode entry){
         successorList.add(0, entry);
 
@@ -32,9 +28,8 @@ public class SuccessorListService {
             removeLastEntry();
     }
 
-    public ChordNode findFirstLiveEntry(Long idFilter){
-        ChordNode n = this.successorList.stream().filter(s -> s.id != idFilter).findFirst().orElse(null);
-        return n;
+    public ChordNode findFirstLiveEntry(){
+        return this.successorList.get(1);
     }
 
     public ChordNode getSuccessor(short i){
@@ -47,6 +42,10 @@ public class SuccessorListService {
 
     public List<ChordNode> getList(){
         return this.successorList;
+    }
+
+    public List<Long> getAllButFirst(){
+        return this.successorList.subList(1, this.successorList.size()-1).stream().map(s -> s.id).collect(Collectors.toList());
     }
 
     @Override

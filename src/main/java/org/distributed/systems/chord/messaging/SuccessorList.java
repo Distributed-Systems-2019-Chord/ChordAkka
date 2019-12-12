@@ -7,17 +7,10 @@ import java.util.List;
 public class SuccessorList {
 
     public static class Request implements Command {
-        public ChordNode nodeToDelete;
-        public ChordNode newNode;
+        public final List<Long> successorIds;
+        public Request(List<Long> successorIds) {
 
-        public Request() {
-
-        }
-
-        public Request(ChordNode nodeToDelete, ChordNode newNode ) {
-
-            this.nodeToDelete = nodeToDelete;
-            this.newNode = newNode;
+            this.successorIds = successorIds;
         }
     }
 
@@ -26,6 +19,10 @@ public class SuccessorList {
 
         public Reply(List<ChordNode> successorList) {
             this.successorList = successorList;
+        }
+
+        public Reply() {
+            this.successorList = null;
         }
     }
 }

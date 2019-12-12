@@ -28,7 +28,10 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 public class NodeActor extends AbstractActor {
 
@@ -195,35 +198,19 @@ public class NodeActor extends AbstractActor {
                     // TODO: Currently blocking, and thus is stuck sometimes > prevent RPC if call same node
                     Timeout timeout = Timeout.create(Duration.ofMillis(ChordStart.STANDARD_TIME_OUT));
                     ChordNode x = fingerTableService.getPredecessor();
+                    List<ChordNode> succList = null;
                     if (getSelf() != fingerTableService.getSuccessor().chordRef) {
-
-                        // First ping for successor if it's available
-                        ChordNode successor = this.fingerTableService.getSuccessor();
-                        try{
-
-                            Future<Object> fsFuture = Patterns.ask(successor.chordRef, new Ping.Request(), timeout);
-                            Ping.Reply rply = (Ping.Reply) Await.result(fsFuture, timeout.duration());
-                        } catch(Exception e){
-                            // if not available, get successor from list
-                            // my successor has failed, update my successor with my first live entry of my successor list
-                            fingerTableService.setSuccessor(successorListService.findFirstLiveEntry(successor.id));
-                            successorListService.replaceAll(successor, new ChordNode(this.nodeId, getSelf()));
-
-                            reconcileWithSuccessor(timeout, successor, new ChordNode(this.nodeId, getSelf()));
-
-                            System.out.println("Successor has failed");
-                            System.out.println("New Successor: " + fingerTableService.getSuccessor().id);
-                            return;
-                        }
 
                         // if available, then stabilize (notify successor and reconcile with successor)
 
                         try{
-                            Future<Object> fsFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new Predecessor.Request(), timeout);
+                            Future<Object> fsFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new Predecessor.Request(successorListService.getAllButFirst()), timeout);
                             Predecessor.Reply rply = (Predecessor.Reply) Await.result(fsFuture, timeout.duration());
                             x = rply.predecessor;
+                            succList = rply.succList;
                         } catch(Exception e){
-                            x = new ChordNode(fingerTableService.NOT_SET, null);
+//                            x = new ChordNode(fingerTableService.NOT_SET, null);
+                            x = successorListService.getList().get(1);
                         }
                     }
 
@@ -237,25 +224,28 @@ public class NodeActor extends AbstractActor {
                         }
                     }
 
-                    if (getSelf() != fingerTableService.getSuccessor().chordRef) {
-                        reconcileWithSuccessor(timeout);
+                    if(succList != null){
+                        succList.remove(succList.size() - 1);
+                        List<ChordNode> newUpdatedList = new ArrayList<ChordNode>();
+                        newUpdatedList.add(0, fingerTableService.getSuccessor());
+                        newUpdatedList.addAll(succList);
+
+                        successorListService.setList(newUpdatedList);
                     }
 
                     // Notify Successor that this node might be it's new predecessor
                     this.fingerTableService.getSuccessor().chordRef.tell(new Notify.Request(new ChordNode(this.nodeId, getSelf())), getSelf());
                     // System.out.println(fingerTableService.toString());
                 })
-                .match(SuccessorList.Request.class, successorListMsg ->{
-                    if (successorListMsg.newNode == null && successorListMsg.nodeToDelete == null){
-                        getSender().tell(new SuccessorList.Reply(successorListService.getList()), getSelf());
-                    }else{
-                        successorListService.replaceAll(successorListMsg.nodeToDelete, successorListMsg.newNode);
-                        getSender().tell(new SuccessorList.Reply(successorListService.getList()), getSelf());
+                // .predecessor RPC
+                .match(Predecessor.Request.class, msg -> {
+                    if(!successorListService.getList().stream().map(s -> s.id).collect(Collectors.toList()).containsAll(msg.succList)){
+                        getSender().tell(new Predecessor.Reply(fingerTableService.getPredecessor(), successorListService.getList()), getSelf());
+                    }else {
+                        getSender().tell(new Predecessor.Reply(fingerTableService.getPredecessor()), getSelf());
                     }
 
                 })
-                // .predecessor RPC
-                .match(Predecessor.Request.class, msg -> getSender().tell(new Predecessor.Reply(fingerTableService.getPredecessor()), getSelf()))
                 // Notify RPC:
                 .match(Notify.Request.class, msg -> {
                     // TODO: Remove Dublicate Ifs (to conform to pseudocode)
@@ -344,34 +334,11 @@ public class NodeActor extends AbstractActor {
                 .build();
     }
 
-    private void reconcileWithSuccessor(Timeout timeout, ChordNode NodeToReplace, ChordNode newNode) {
-        // Ask Successor for successor list
-        if(!getSelf().equals(fingerTableService.getSuccessor())){
-            try{
-                Future<Object> slFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new SuccessorList.Request(NodeToReplace, newNode), timeout);
-                SuccessorList.Reply rply = (SuccessorList.Reply) Await.result(slFuture, timeout.duration());
-
-                if (rply.successorList != null){
-                    // Set my successor list with list from successor
-                    successorListService.setList(rply.successorList);
-                    // Remove last entry
-                    successorListService.removeLastEntry();
-                    // prepend successor to my list
-                    successorListService.prependEntry(fingerTableService.getSuccessor());
-                }
-
-            } catch(Exception e){
-                System.out.println("Reconcile With Successor failed");
-            }
-        }
-
-    }
-
     private void reconcileWithSuccessor(Timeout timeout) {
         // Ask Successor for successor list
         if(!getSelf().equals(fingerTableService.getSuccessor())){
             try{
-                Future<Object> slFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new SuccessorList.Request(), timeout);
+                Future<Object> slFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new SuccessorList.Request(successorListService.getAllButFirst()), timeout);
                 SuccessorList.Reply rply = (SuccessorList.Reply) Await.result(slFuture, timeout.duration());
 
                 if (rply.successorList != null){
