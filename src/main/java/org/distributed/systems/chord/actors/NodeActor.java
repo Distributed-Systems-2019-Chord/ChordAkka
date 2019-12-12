@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.LongStream;
 
 public class NodeActor extends AbstractActor {
 
@@ -415,11 +416,11 @@ public class NodeActor extends AbstractActor {
         KeyValue.GetAllReply reply = null;
         try {
             reply = (KeyValue.GetAllReply)Await.result(getAllFuture,timeout.duration());
+            System.out.println("Retrieved values");
+            reply.keys.forEach((key, value) -> System.out.println(key + ":" + value));
         } catch (Exception e) {
             e.printStackTrace();
         }
-        System.out.println("Retrieved values");
-        reply.keys.forEach((key, value) -> System.out.println(key + ":" + value));
         fingerTableService.getPredecessor().chordRef.tell(new LeaveMessage.ForPredecessor(fingerTableService.getSuccessor()),getSelf());
         fingerTableService.getSuccessor().chordRef.tell(new LeaveMessage.ForSuccessor(fingerTableService.getPredecessor(),reply.keys),getSelf());
     }
