@@ -396,8 +396,8 @@ public class NodeActor extends AbstractActor {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        fingerTableService.getPredecessor().chordRef.tell(new LeaveMessage.ForPredecessor(fingerTableService.getSuccessor()), getSelf());
-        fingerTableService.getSuccessor().chordRef.tell(new LeaveMessage.ForSuccessor(fingerTableService.getPredecessor(), reply.keys), getSelf());
+        fingerTableService.getPredecessor().chordRef.tell(new LeaveMessage.ForPredecessor(fingerTableService.getSuccessor()), ActorRef.noSender());
+        fingerTableService.getSuccessor().chordRef.tell(new LeaveMessage.ForSuccessor(fingerTableService.getPredecessor(), reply.keys), ActorRef.noSender());
     }
 
     private void fix_fingers() {
