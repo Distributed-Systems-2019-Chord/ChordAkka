@@ -249,7 +249,6 @@ public class NodeActor extends AbstractActor {
 
                     // Notify Successor that this node might be it's new predecessor
                     this.fingerTableService.getSuccessor().chordRef.tell(new Notify.Request(new ChordNode(this.nodeId, getSelf())), getSelf());
-                    // System.out.println(fingerTableService.toString());
                 })
                 // .predecessor RPC
                 .match(Predecessor.Request.class, msg -> {
@@ -267,7 +266,6 @@ public class NodeActor extends AbstractActor {
                         // Skip output if nothing changes
                         return;
                     }
-                    // System.out.println(fingerTableService.toString());
                 })
                 .match(FindSuccessor.Request.class, msg -> {
                     // +1 to do inclusive interval
@@ -352,34 +350,9 @@ public class NodeActor extends AbstractActor {
                     log.info("new successor is: " + leaveMessage.getSuccessor().id);
                     this.fingerTableService.setSuccessor(leaveMessage.getSuccessor());
                 })
-                .match(KeyValue.Delete.class, deleteMessage -> {
-                    deleteKey(deleteMessage);
-                })
+                .match(KeyValue.Delete.class, this::deleteKey)
                 .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey))
                 .build();
-    }
-
-    private void reconcileWithSuccessor(Timeout timeout) {
-        // Ask Successor for successor list
-        if (!getSelf().equals(fingerTableService.getSuccessor())) {
-            try {
-                Future<Object> slFuture = Patterns.ask(fingerTableService.getSuccessor().chordRef, new SuccessorList.Request(successorListService.getAllButFirst()), timeout);
-                SuccessorList.Reply rply = (SuccessorList.Reply) Await.result(slFuture, timeout.duration());
-
-                if (rply.successorList != null) {
-                    // Set my successor list with list from successor
-                    successorListService.setList(rply.successorList);
-                    // Remove last entry
-                    successorListService.removeLastEntry();
-                    // prepend successor to my list
-                    successorListService.prependEntry(fingerTableService.getSuccessor());
-                }
-
-            } catch (Exception e) {
-                System.out.println("Reconcile With Successor failed");
-            }
-        }
-
     }
 
     private ActorRef closest_preceding_node(long id) {
@@ -392,7 +365,7 @@ public class NodeActor extends AbstractActor {
         return getSelf();
     }
 
-    private void check_predecessor() throws Exception, TimeoutException {
+    private void check_predecessor() {
         /*
         if (predecessor has failed)
             predecessor = nil
