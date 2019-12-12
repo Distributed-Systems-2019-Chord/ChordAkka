@@ -1,26 +1,51 @@
 package org.distributed.systems.chord.service;
 
+import org.distributed.systems.chord.models.Pair;
+
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class StorageService {
 
-    private Map<String, Serializable> valueStore;
+    private Map<Long, Pair<String, Serializable>> valueStore;
 
     public StorageService() {
         this.valueStore = new HashMap<>();
     }
 
-    public void put(String key, Serializable value) {
+    public void put(long key, Pair<String, Serializable> value) {
         this.valueStore.put(key, value);
     }
 
-    public Serializable get(String key) {
+    public Pair<String, Serializable> get(long key) {
         return this.valueStore.get(key);
     }
 
-    public void delete(String originalKey) {
-        this.valueStore.remove(originalKey);
+    public Map<Long, Pair<String,Serializable>> getAll(){
+        return this.valueStore;
+    }
+
+    public void putAll(Map<Long, Pair<String, Serializable>> valueStore) {
+        this.valueStore.putAll(valueStore);
+    }
+
+    public Map<Long, Pair<String, Serializable>> getSubset(List<Long> keys) {
+        return keys.stream()
+                .filter(this.valueStore::containsKey)
+                .collect(Collectors.toMap(Function.identity(), this.valueStore::get));
+    }
+
+    public void deleteSubset(List<Long> keys) {
+        keys.stream()
+                .filter(this.valueStore::containsKey)
+                .map(this.valueStore::remove);
+    }
+
+    public void delete(Long key) {
+        this.valueStore.remove(key);
     }
 }
