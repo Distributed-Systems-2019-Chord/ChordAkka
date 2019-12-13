@@ -36,13 +36,12 @@ public class SuccessorListService {
         return this.successorList;
     }
 
-    public List<Long> getAllButFirst() {
+    public List<ChordNode> getAllButFirst() {
         if (successorList.isEmpty()) {
             return new ArrayList<>();
         } else {
             return successorList.subList(1, successorList.size())
                     .stream()
-                    .map(s -> s.id)
                     .collect(Collectors.toList());
         }
     }

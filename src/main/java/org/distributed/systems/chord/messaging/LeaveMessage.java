@@ -7,6 +7,11 @@ import java.io.Serializable;
 import java.util.Map;
 
 public class LeaveMessage {
+
+    public static class Request implements  Command {
+
+    }
+
     public static class ForPredecessor implements Command {
         private ChordNode successor;
     public ForPredecessor(ChordNode successor){
