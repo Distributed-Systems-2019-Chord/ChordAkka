@@ -113,10 +113,12 @@ public class NodeActor extends AbstractActor {
         getContext().getSystem().scheduler().scheduleWithFixedDelay(Duration.ZERO, Duration.ofMillis(CHECK_PREDECESSOR_SCHEDULE_TIME), checkPredecessorActor, "CheckPredecessor", getContext().system().dispatcher(), ActorRef.noSender());
 
 
-        CoordinatedShutdown.get(ChordStart.system).addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind(), "orderlyLeaveTask",  () -> {
-            return akka.pattern.Patterns.ask(getSelf(), new LeaveMessage.Request(), Duration.ofSeconds(30))
-                    .thenApply(reply -> Done.getInstance());
-        });
+        //Hook up the node leave to the coordinated shutdown
+        CoordinatedShutdown.get(ChordStart.system)
+                .addJvmShutdownHook(() -> {
+                    leave();
+                    System.out.println("Leaving the network now...");
+                });
     }
 
     private void getValueForKey(long hashKey) {
@@ -362,10 +364,6 @@ public class NodeActor extends AbstractActor {
                 .match(KeyValue.Delete.class, deleteMessage -> {
                     deleteKey(deleteMessage);
                 })
-                .match(LeaveMessage.Request.class, msg -> {
-                    System.out.println("Here I must leave");
-                    leave();
-                })
                 .match(KeyValue.Get.class, getValueMessage -> getValueForKey(getValueMessage.hashKey))
                 .build();
     }
@@ -426,7 +424,6 @@ public class NodeActor extends AbstractActor {
         reply.keys.forEach((key, value) -> System.out.println(key + ":" + value));
         fingerTableService.getPredecessor().chordRef.tell(new LeaveMessage.ForPredecessor(fingerTableService.getSuccessor()), ActorRef.noSender());
         fingerTableService.getSuccessor().chordRef.tell(new LeaveMessage.ForSuccessor(fingerTableService.getPredecessor(), reply.keys), ActorRef.noSender());
-        getSender().tell("done", getSelf());
     }
 
     private void fix_fingers() {

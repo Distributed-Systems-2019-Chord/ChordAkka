@@ -15,7 +15,18 @@ A Chord implementation based on Java [Akka](https://akka.io/).
 `java -Dconfig.resource=/centralNode.conf -jar chord-1.0-allinone.jar`
 
 ### With docker:
-`docker-compose up`
+
+#### Start A Central Node
+
+- `docker-compose up`
+
+#### Start A Node:
+
+- `./start_regular_node.sh $NODE_ID $IP`
+
+#### Benchmark With Memcache:
+
+- `docker-compose run benchmark --protocol=memcache_text --threads=1 --port 11211 --server=centralnode`
 
 There are 2 types of nodes, a central and a regular node. The central node is used to join the network, this node should be started as the first node in the network so that others can join.
 
@@ -49,7 +60,7 @@ delete WeLike
 
 ## Benchmarking in Docker
 
-`docker-compose run benchmark --protocol=memcache_text --port 11211 --server=centralnode`
+`docker-compose run benchmark --protocol=memcache_text -t=1 --port 11211 --server=centralnode`
 
 ## Open Telnet in Docker
 
