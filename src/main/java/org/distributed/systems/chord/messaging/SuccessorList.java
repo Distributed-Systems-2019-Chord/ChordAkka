@@ -7,10 +7,7 @@ import java.util.List;
 public class SuccessorList {
 
     public static class Request implements Command {
-        public final List<Long> successorIds;
-        public Request(List<Long> successorIds) {
-
-            this.successorIds = successorIds;
+        public Request() {
         }
     }
 

@@ -34,7 +34,6 @@ class StorageActor extends AbstractActor {
                 .match(KeyValue.Put.class, putValueMessage -> {
                     long hashKey = putValueMessage.hashKey;
                     Pair<String, Serializable> value = putValueMessage.value;
-                    System.out.println("Put key " + hashKey);
                     this.storageService.put(hashKey, value);
 
                     ActorRef optionalSender = getContext().getSender();
@@ -45,7 +44,6 @@ class StorageActor extends AbstractActor {
                 })
                 .match(KeyValue.Get.class, getValueMessage -> {
                     long key = getValueMessage.hashKey;
-                    System.out.println("GET key " + key);
                     Pair<String, Serializable> val = this.storageService.get(key);
                     getContext().getSender().tell(new KeyValue.GetReply(key, val), ActorRef.noSender());
                 })

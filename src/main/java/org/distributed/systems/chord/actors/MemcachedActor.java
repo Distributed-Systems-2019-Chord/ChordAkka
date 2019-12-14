@@ -73,7 +73,7 @@ class MemcachedActor extends AbstractActor {
                         KeyValue.GetReply rply = (KeyValue.GetReply) Await.result(queryFuture, timeout.duration());
 
                         if (rply.value != null) {
-                            int payload_length = rply.value.toString().length();
+                            int payload_length = rply.value.getValue().toString().length();
                             ByteString getdataresp = ByteString.fromString(rply.value.getValue().toString() + "\r\n");
                             ByteString getresp = ByteString.fromString("VALUE " + key + " 0 " + (payload_length) + " \r\n");
                             client.tell(TcpMessage.write(getresp), getSelf());
@@ -158,6 +158,9 @@ class MemcachedActor extends AbstractActor {
                 new OnComplete<Iterable<Boolean>>() {
                     public void onComplete(Throwable failure, Iterable<Boolean> queryResults) {
                         // Hook for finished query
+                        if (failure != null) {
+                            System.out.println("Something Failed");
+                        }
                     }
                 }, getContext().system().dispatcher());
 
