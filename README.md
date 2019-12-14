@@ -25,6 +25,9 @@ To run regular nodes use parameter: `-Dconfig.resource=/regularNode.conf`
 
 To set your own node id specify `NODE_ID=x` in the environment variables.
 
+Central node: `docker-compose up` 
+Example for regular node: `./start_regular_node.sh 350 172.21.0.6`
+
 ## Testing the Memcached Interface
 Either issue the following commands:
 `echo -e 'set WeLike 0 60 19\r\nDistributed Systems\r\n' | nc localhost 11211`
