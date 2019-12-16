@@ -11,9 +11,12 @@ public class ChordNode implements Serializable {
     // Is IP + Port
     public ActorRef chordRef;
 
+    public boolean isStale;
+
     public ChordNode(long id, ActorRef chordRef) {
         this.id = id;
         this.chordRef = chordRef;
+        this.isStale = false;
     }
 
     @Override
