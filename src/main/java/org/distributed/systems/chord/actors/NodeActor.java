@@ -293,7 +293,8 @@ public class NodeActor extends AbstractActor {
                         } else {
                             // try next:
                             ChordNode ndash = this.closest_preceding_node(msg.id);
-                            ndash.chordRef.forward(msg, getContext());
+                            FindSuccessor.Request newMsg = new FindSuccessor.Request(msg.id, msg.fingerTableIndex, msg.originalSender,msg.amountOfHops + 1);
+                            ndash.chordRef.forward(newMsg, getContext());
                         }
                 })
                 .match(SuccessorList.Request.class, msg -> {
