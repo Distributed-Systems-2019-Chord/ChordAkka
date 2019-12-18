@@ -9,11 +9,13 @@ public class FindSuccessor {
         public final long id;
         public final int fingerTableIndex;
         public final ActorRef originalSender;
+        public final long amountOfHops;
 
-        public Request(long id, int fingerTableIndex, ActorRef originalSender) {
+        public Request(long id, int fingerTableIndex, ActorRef originalSender, long amountOfHops) {
             this.id = id;
             this.fingerTableIndex = fingerTableIndex;
             this.originalSender = originalSender;
+            this.amountOfHops = amountOfHops;
         }
     }
 
@@ -22,11 +24,13 @@ public class FindSuccessor {
         public final ActorRef succesor;
         public final long id;
         public final int fingerTableIndex;
+        public final long amountOfHops;
 
-        public Reply(ActorRef successor, long id, int fingerTableIndex) {
+        public Reply(ActorRef successor, long id, int fingerTableIndex, long amountOfHops) {
             this.succesor = successor;
             this.id = id;
             this.fingerTableIndex = fingerTableIndex;
+            this.amountOfHops = amountOfHops;
         }
     }
 }
